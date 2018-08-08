@@ -12,9 +12,8 @@ import collections
 from kaldi_io import kaldi_io
 from sklearn.cluster import MiniBatchKMeans, KMeans
 from scipy.cluster.vq import vq, whiten
-from MiscHelper import Misc
-from IteratorHelper import DataIterator
-
+from KaldiHelper.MiscHelper import Misc
+from KaldiHelper.IteratorHelper import DataIterator
 
 
 class KmeansVq(object):
@@ -28,7 +27,6 @@ class KmeansVq(object):
         self.codebook = None
         # self._load_codebook_pd('codebook.pd')
         # self._build_dataset()
-
 
     def create_codebook(self, nj, data_folder):
         # create keys for enumeration
@@ -74,21 +72,17 @@ class KmeansVq(object):
             except StopIteration:
                 break
 
-
     def load_pickle_codebook(self, infile):
         self._dict_codebook = pickle.loads(infile.read())
 
-
     def save_pickle_codebook(self, outfile):
         outfile.write(pickle.dumps(self._dict_codebook))
-
 
     def load_codebook(self, path):
         if not self._kaldi_formatting:
             raise TypeError
         for key, mat in kaldi_io.read_mat_ark(path):
             self.codebook = mat
-
 
     def save_codebook(self, path):
         if not self._kaldi_formatting:
@@ -113,7 +107,6 @@ class KmeansVq(object):
         with open(path, 'wb') as f:
             # print(self.codebook)
             kaldi_io.write_mat(f, self.codebook, key='cb')
-
 
     def vq_data(self, nj, data_folder, output_folder):
         # vqing traing data
@@ -357,9 +350,6 @@ class KmeansVqMmi(object):
                 kaldi_io.write_mat(f, mat.astype(np.float32, copy=False), key=key)
 
 
-
-
-
 def main(arguments):
     parser = argparse.ArgumentParser( description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -393,8 +383,6 @@ def main(arguments):
     else :
         print('vq not yet implemented')
 
-
-
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
 
@@ -404,5 +392,5 @@ if __name__ == "__main__":
     # tmp.mutual_information(35)
     # tmp.multiple_vq_data(20, 'train_20kshort_nodup', '../plain_feats/backup_20k_vq/vq_train')
 
-    tmp.vq_data(20, 'train_20kshort_nodup', '../exp/test_400_0/vq_train')
-    tmp.vq_data(30, 'test', '../exp/test_400_0/vq_test')
+    # tmp.vq_data(20, 'train_20kshort_nodup', '../exp/test_400_0/vq_train')
+    # tmp.vq_data(30, 'test', '../exp/test_400_0/vq_test')
