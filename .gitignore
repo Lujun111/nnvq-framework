@@ -3,6 +3,7 @@ data
 model_checkpoint
 tensorboard
 meta_data
+tf_data
 
 # files
 .idea

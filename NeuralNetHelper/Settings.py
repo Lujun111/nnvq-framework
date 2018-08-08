@@ -2,9 +2,9 @@
 
 
 # path to data
-path_train = '../tf_data/train_20k'
-path_test = '../tf_data/test'
-path_dev = '../tf_data/dev'
+path_train = 'tf_data/train_20k'
+path_test = 'tf_data/test'
+path_dev = 'tf_data/dev'
 
 path_tensorboard = 'tensorboard'
 path_checkpoint = 'model_checkpoint'
