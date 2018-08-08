@@ -1,0 +1,11 @@
+# data files
+data
+model_checkpoint
+tensorboard
+meta_data
+
+# files
+.idea
+backup_codebook
+
+
