@@ -105,10 +105,10 @@ class KaldiMiscHelper(object):
 
 
 if __name__ == "__main__":
-    test = KaldiHelper()
+    test = KaldiMiscHelper()
     # test.merge_data_phonemes(20, 'train_20kshort_nodup', '../alignments/nnet_labels/all_ali', '../')
     # test.merge_special(20, 'train_40kshort_nodup', '../alignments/tri3/all_ali', '../')
-    # test.merge_special(30, 'test', '../alignments/state_labels/all_ali_test', '../')
+    test.merge_special(30, 'dev', 'tmp/state_labels/all_ali_dev', 'tmp')
     # test.merge_special(30, 'test', '../alignments/test/all_ali', '../')
     # test.merge_special(20, 'test', '../alignments/test/all_ali', '../')
-    test.merge_special(30, 'dev', '../alignments/dev/all_ali', '../')
+    # test.merge_special(20, 'train_20kshort_nodup', 'tmp/state_labels/all_ali_train', 'tmp')

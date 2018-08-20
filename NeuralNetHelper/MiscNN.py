@@ -38,7 +38,7 @@ class MiscNN(object):
         return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
 
     def _helper_mi_tf(self, labels, alignments):
-        p = 41
+        p = 127
 
         pwtmp = tf.Variable(tf.zeros(p), trainable=False, dtype=tf.float32)
         pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
@@ -63,8 +63,8 @@ class MiscNN(object):
         return pwtmp, pytmp, pw_y_tmp
 
     def conditioned_probability(self, output_nn, phonemes, discrete=False):
-        p = 41  # num of phones
-        eps = 0.5
+        p = 127  # num of phones
+        eps = 0.01
 
         # get data
         phonemes = tf.cast(phonemes, dtype=tf.int32)  # cast to int and put them in [[alignments]]
@@ -104,7 +104,7 @@ class MiscNN(object):
 
     def joint_probability(self, output_nn, phonemes):
         # j is size of codebook
-        p = 41  # num of phones
+        p = 127  # num of phones
         batch_size = tf.cast(tf.shape(output_nn)[0], dtype=tf.float32)  # input size
 
         # create var for joint probability
@@ -123,7 +123,7 @@ class MiscNN(object):
         return joint_prob
 
     def vq_data(self, output_nn, phonemes, nominator, denominator):
-        p = 41  # num of phones
+        p = 127  # num of phones
         eps = 0.5
 
         # get data
@@ -159,8 +159,8 @@ class MiscNN(object):
         cond_prob = tf.transpose(cond_prob)
         # cond_prob = tf.Print(cond_prob, [cond_prob])
 
-        s_k = tf.Variable(tf.zeros([41]), trainable=False, dtype=tf.float32)
-        s_k.assign(tf.fill([41], 0.0))
+        s_k = tf.Variable(tf.zeros([127]), trainable=False, dtype=tf.float32)
+        s_k.assign(tf.fill([127], 0.0))
 
         out_nn = tf.Variable(tf.zeros([400]), trainable=False, dtype=tf.float32)
         out_nn.assign(tf.fill([400], 0.0))
@@ -180,7 +180,7 @@ class MiscNN(object):
 
         # out_nn = tf.reduce_sum(output_nn, axis=0) / tf.cast(tf.shape(output_nn)[0], dtype=tf.float32)
 
-        joint = tf.tile(tf.expand_dims(out_nn, 1), [1, 41]) * cond_prob
+        joint = tf.tile(tf.expand_dims(out_nn, 1), [1, 127]) * cond_prob
 
         tmp = joint / tf.reduce_sum(joint, axis=1, keepdims=True)
 

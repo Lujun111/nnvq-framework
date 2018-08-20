@@ -166,6 +166,8 @@ class Misc(object):
                 tf_writer.write(example.SerializeToString())
 
     def create_tfrecords(self, nj, trans_phoneme, stats, path_input, path_output):
+        # TODO refactor to KaldiMiscHelper ???
+
         """
 
         :param nj: number of jobs split into in data folder
@@ -235,7 +237,7 @@ class Misc(object):
 if __name__ == "__main__":
     test = Misc()
     # test.calculate_mi_merged(30, '../plain_feats/backup_20k_vq/400/vq_test', '../alignments/train')
-    # test.create_tfrecords(20, True, 'stats.mat', '../features/train_40k/feats_phoneme', '../tf_data/train_40k')
-    # test.create_tfrecords(30, True, 'stats.mat', '../features/test', '../tf_data/test_40k')
-    test.create_tfrecords(30, True, 'stats_20k.mat', '../features/dev', '../tf_data/dev')
+    # test.create_tfrecords(20, False, '../stats_20k.mat', '../tmp/feat_20k_state', '../tmp')
+    test.create_tfrecords(30, False, '../stats_20k.mat', '../tmp/feat_test_state', '../tmp')
+    # test.create_tfrecords(30, False, 'stats_20k.mat', '../features/dev', '../tf_data/dev')
 

@@ -4,6 +4,7 @@ model_checkpoint
 tensorboard
 meta_data
 tf_data
+tmp
 
 # files
 .idea

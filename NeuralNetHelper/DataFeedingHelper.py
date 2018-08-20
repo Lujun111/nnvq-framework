@@ -24,8 +24,7 @@ class DataFeeder(object):
         # Parse the record into tensors.
         dataset = dataset.map(_parse_function)
         dataset = dataset.shuffle(100000)
-        dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(self._batch_size))
-        # dataset = dataset.batch(self._batch_size)
+        dataset = dataset.batch(self._batch_size, drop_remainder=True)
         return dataset
 
     def get_next(self):

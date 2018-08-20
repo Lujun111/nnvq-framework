@@ -37,6 +37,9 @@ Settings.vqing = False
 features = tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features')
 labels = tf.placeholder(tf.float32, shape=[None, Settings.dim_labels], name='ph_labels')
 lr = tf.placeholder(tf.float32, shape=[], name='learning_rate')
+
+lr_decay = tf.train.exponential_decay(Settings.learning_rate, global_step, 400, 0.90, staircase=True)
+
 log_prob = None
 if Settings.vqing:
     log_prob = tf.placeholder(tf.float32, shape=[Settings.num_phonemes, Settings.codebook_size], name='prob')
@@ -74,6 +77,8 @@ if Settings.vqing:
     loss = model.new_loss(labels, cond_prob)
 else:
     loss = model.new_loss(labels, cond_prob)
+    # l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
+    # loss += 1e-5 * l2_loss
 # print(loss)
 # loss += reg_term
 # loss += 1e-1 * mutual_info[2]
@@ -88,7 +93,7 @@ tf.summary.scalar('misc/conditioned_entropy', conditioned_entropy)
 update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 with tf.control_dependencies(update_ops):
     optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-    # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.8)
+    # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.0)
     gradients = optimizer.compute_gradients(loss)
     train_op = optimizer.apply_gradients(gradients, global_step=global_step)
 
@@ -174,7 +179,11 @@ for i in range(Settings.epoch_size):
     # model.train = True
     while True:
         try:
-            feat, labs = sess.run([features_train, labels_train])
+            feat, labs, new_lr = sess.run([features_train, labels_train, lr_decay])
+
+            # check for exponential decayed learning rate and set it
+            if Settings.exponential_decay:
+                Settings.learning_rate = new_lr
 
             if Settings.vqing:
                 _, loss_value, summary, count, mi, y_print, test = sess.run(
@@ -186,7 +195,7 @@ for i in range(Settings.epoch_size):
                     [train_op, loss, merged, global_step, mutual_info, y, testing],
                     feed_dict={"is_train:0": True, features: feat, labels: labs, lr: Settings.learning_rate})
             # print(kernel)
-            # print(np.shape(feat))
+            # print(labs)
             # print(sess.run("BatchNorm/AssignMovingAvg_1:0"))
             if count % 100:
                 train_writer.add_summary(summary, count)
