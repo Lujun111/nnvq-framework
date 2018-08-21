@@ -12,6 +12,7 @@ path_meta = 'meta_data'
 
 # Hyperparameter
 num_phonemes = 127
+delta = 0.01    # delta for P(s_k|m_j)
 codebook_size = 400
 batch_size = 15000
 epoch_size = 100
@@ -26,3 +27,5 @@ exponential_decay = False
 # train Network
 vqing = False
 sampling_discrete = False
+# create P(s_k|m_j) from training data
+create_conditioned_prob = True

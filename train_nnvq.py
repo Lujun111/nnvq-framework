@@ -4,6 +4,7 @@ from tensorflow.python import debug as tf_debug
 import os
 import time
 import numpy as np
+from kaldi_io import kaldi_io
 from NeuralNetHelper.MiscNN import MiscNN
 from NeuralNetHelper.ModelHelper import Model
 from NeuralNetHelper import Settings
@@ -160,8 +161,8 @@ for i in range(Settings.epoch_size):
                 #     sess.run([nom_init, den_init])
                 #     break
             except tf.errors.OutOfRangeError:
-                nom_vq += 0.5
-                den_vq += 41 * 0.5
+                nom_vq += 0.01
+                den_vq += 127 * 0.01
                 prob = nom_vq / den_vq
 
                 # reset den and nom
@@ -175,8 +176,6 @@ for i in range(Settings.epoch_size):
         sess.run(train_feeder.iterator.initializer)
 
     print('Doing single epoch...')
-    # setting training to True
-    # model.train = True
     while True:
         try:
             feat, labs, new_lr = sess.run([features_train, labels_train, lr_decay])
@@ -269,5 +268,32 @@ for i in range(Settings.epoch_size):
             tmp_pywtest.to_csv(Settings.path_meta + '/pwy_nnvq.txt', header=False, index=False)
 
             break
+
+    if Settings.create_conditioned_prob:
+        # resetting the iterator
+        sess.run(train_feeder.iterator.initializer)
+        print('Create P(s_k|m_j) from training data...')
+        while True:
+            try:
+                feat, labs = sess.run([features_train, labels_train])
+                nom_vq, den_vq = sess.run(data_vqed, feed_dict={"is_train:0": False, features: feat,
+                                                                labels: labs, lr: Settings.learning_rate})
+
+            except tf.errors.OutOfRangeError:
+                nom_vq += Settings.delta
+                den_vq += Settings.num_phonemes * Settings.delta
+                prob = nom_vq / den_vq
+
+                # saving matrix with kaldi_io
+                save_dict = {'p_s_m': prob}
+                print('Saving P(s_k|m_j)')
+                with open('p_s_m.mat', 'wb') as f:
+                    for key, mat in list(save_dict.items()):
+                        kaldi_io.write_mat(f, mat, key=key)
+
+                # reset den and nom
+                sess.run([nom_init, den_init])
+
+                break
 
 print("Training done")
