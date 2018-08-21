@@ -141,9 +141,11 @@ class TrainedModel(object):
 
 
 if __name__ == "__main__":
-    model = TrainedModel('../model_checkpoint/saved_model-4.meta', '../stats_20k.mat')
-    model.do_inference(20, '../../features/train_20k/feats', '../../exp/test_400_0/vq_train')
-    model.do_inference(30, 'test', '../../exp/test_400_0/vq_test')
+    model = TrainedModel('../model_checkpoint/saved_model-12.meta', '../stats_20k.mat')
+    model.do_inference(20, '/features/train_20k/feats', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
+                       '/exp/test_400_0/vq_train')
+    model.do_inference(30, 'test', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
+                                   'exp/test_400_0/vq_test')
 
     # model.do_inference(35, '../plain_feats_20k', '../plain_feats/backup_20k_vq/vq_train')
     # model.do_inference(35, '../plain_feats_20k/train_20k', '../plain_feats/backup_20k_vq/vq_train')

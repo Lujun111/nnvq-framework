@@ -25,14 +25,14 @@ class Model(object):
         # self.input_batch = tf.Print(self.input_batch, [self.input_batch])
 
         # fc1 = slim.layers.fully_connected(self.input_batch, 512)
-        fc1 = tf.layers.dense(self.input_batch, num_neurons, activation=tf.nn.sigmoid)
-        fc1_bn = tf.layers.batch_normalization(fc1, training=self.train)
+        fc1 = tf.layers.dense(self.input_batch, num_neurons, activation=tf.nn.relu)
+        fc1_bn = tf.layers.batch_normalization(fc1, training=self.train, center=False, scale=False)
         # fc1_dropout = tf.layers.dropout(fc1_bn, rate=0.3, training=self.train)
-        fc2 = tf.layers.dense(fc1_bn, num_neurons, activation=tf.nn.sigmoid)
-        fc2_bn = tf.layers.batch_normalization(fc2, training=self.train)
+        fc2 = tf.layers.dense(fc1_bn, num_neurons, activation=tf.nn.relu)
+        fc2_bn = tf.layers.batch_normalization(fc2, training=self.train, center=False, scale=False)
         # # fc2_dropout = tf.layers.dropout(fc2_bn, rate=0.3, training=self.train)
-        fc3 = tf.layers.dense(fc2_bn, num_neurons, activation=tf.nn.relu)
-        fc3_bn = tf.layers.batch_normalization(fc3, training=self.train)
+        # fc3 = tf.layers.dense(fc2_bn, num_neurons, activation=tf.nn.leaky_relu)
+        # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train)
         # #
         # fc4 = tf.layers.dense(fc3_bn, num_neurons, activation=tf.nn.sigmoid)
         # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train)
@@ -46,7 +46,7 @@ class Model(object):
         # fc4 = tf.layers.dense(fc3_bn, self.cb_size, activation=None, trainable=False,
         #                       kernel_initializer=tf.initializers.identity,
         #                       bias_initializer=tf.initializers.zeros)
-        out = tf.layers.dense(fc3_bn, self.cb_size, activation=tf.nn.sigmoid)
+        out = tf.layers.dense(fc2_bn, self.cb_size, activation=tf.nn.sigmoid)
         out_scaled = tf.scalar_mul(self.scale, out)
         self.wo_soft = out_scaled
         self.inference = tf.nn.softmax(out_scaled, name='nn_output')
