@@ -10,10 +10,20 @@ from kaldi_io import kaldi_io
 from KaldiHelper.IteratorHelper import DataIterator
 from KaldiHelper.MiscHelper import Misc
 
-# TODO no path and file checking so far
 
+# TODO no path and file checking so far
 class TrainedModel(object):
+    """
+        TrainedModel for performing the inference after training
+    """
     def __init__(self, meta_file, stats_file, cond_prob_file, transform_prob=True, log_output=True):
+        """
+        :param meta_file:       path to meta file (has to be created during training)
+        :param stats_file:      path to stats file for normalization (kaldi-format)
+        :param cond_prob_file:  path to P(s_k|m_j) file (kaldi-format)
+        :param transform_prob:  flag cond_prob_file to create continuous probability
+        :param log_output:      flag for setting log-output
+        """
         # define some fields
         self.transform = transform_prob     # transform prob to continuous probability (default=True)
         self.log_ouput = log_output         # do log on output (default=True)
@@ -41,35 +51,37 @@ class TrainedModel(object):
         # of the inference model
 
     def do_inference(self, nj, input_folder, output_folder):
-        # tmp dictionary
-        inferenced_data = {}    # storing the inferenced data
-        df_tmp = pd.DataFrame() # temp dataframe for accumulation data for calc mi
+        """
+        Does the inference of the model
 
+        :param nj:              number of jobs (how the dataset is split in kaldi)
+        :param input_folder:    path to the data folder to do the inference
+        :param output_folder:   path to save the output of the inference
+        """
+
+        # create DataIterator for iterate through the split folder created by kaldi
         dataset = DataIterator(nj, input_folder)
-        misc = Misc()
 
+        # number iterator for counting, necessary for writing the matrices later
         iterator = iter([i for i in range(1, dataset.get_size() + 1)])
 
         features_all = []
         phoneme_all = []
+        inferenced_data = {}  # storing the inferenced data
 
         while True:
             try:
-                data_path = dataset.next_file()
+                data_path = dataset.next_file()  # get path to data
                 print(data_path)
+                # iterate through data
                 for key, mat in kaldi_io.read_mat_ark(data_path):
-                    inferenced_data[key] = self._do_single_inference(mat[:, :39])  # not taking the phonemes in the data
-                    if np.shape(mat)[1] > 39:   # get statistics for mi
+                    inferenced_data[key] = self._do_single_inference(mat[:, :39])  # do inference for one batch
+                    if np.shape(mat)[1] > 39:   # get statistics for mi (only if we input data + labels), for debugging
                         phoneme_all.append(mat[:, 39])
+                    # add for debugging, see below
                     features_all.append(self._normalize_data(mat[:, :39]))
-                # if np.shape(df_tmp.values)[0] > 0:   # print mi if we accumulated data
-                #     phoneme_all.append(df_tmp.values)
-                #     # print('Mutual Information: ' + str(misc.calculate_mi(df_tmp.values[:, 0], df_tmp.values[:, 1])))
-                #     df_tmp = pd.DataFrame()
 
-                # print(labels_all)
-                # print(phoneme_all)
-
+                # write posteriors (inferenced data) to files
                 with open(output_folder + '/feats_vq_' + str(next(iterator)), 'wb') as f:
                     for key, mat in list(inferenced_data.items()):
                         if self.transform:
@@ -79,19 +91,10 @@ class TrainedModel(object):
                 inferenced_data = {}  # reset dict
 
             except StopIteration:
-                # hardcoded for mi
+                # hardcoded for mi, for debugging
                 if False:
                     misc = Misc()
                     features_all = np.concatenate(features_all)
-                    # print(features_all.shape)
-                    # stats = {}
-                    # stats['mean'] = np.expand_dims(np.mean(features_all[:, :39], axis=0), 1)
-                    # stats['std'] = np.expand_dims(np.std(features_all[:, :39], axis=0), 1)
-                    # with open('stats_new.mat', 'wb') as f:
-                    #     for key, mat in list(stats.items()):
-                    #         print(mat)
-                    #         kaldi_io.write_mat(f, stats[key], key=key)
-
                     phoneme_all = np.expand_dims(np.concatenate(phoneme_all), 1)
                     phoneme_all = misc.trans_vec_to_phones(phoneme_all)
                     # print(misc.calculate_mi(features_all, phoneme_all))
@@ -109,31 +112,61 @@ class TrainedModel(object):
                 break
 
     def _do_single_inference(self, np_mat):
-        # TODO check for None
+        """
+        Does a single inference for a batch (size can be chosen as prefered)
+
+        :param np_mat:  batch of data (e.g. data of size [N, dim_features])
+        :return:        output of the network
+        """
+        # TODO check for None; normalize data (YES/NO)
+        # normalize data
         np_mat = self._normalize_data(np_mat)
+
+        # inference
         output = self._session.run("nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-        # pd.DataFrame(self._session.run("fully_1/kernel:0")).to_csv('kernel_inf.txt', index=False, header=False)
+
+        # transform data with "continuous trick"
+        # here same theory:
+        # P(m_j) = output
+        # P(o_k) = sum_j [ P(m_j) * P(s_k|m_j) ]
         if self.transform:
-            output = np.dot(output, self.cond_prob)
-            # print(np.shape(output))
+            if self.cond_prob is not None:
+                output = np.dot(output, self.cond_prob)
+            else:
+                raise ValueError("cond_prob is None, please check!")
+        # if we don't do the "continuous trick" we output discrete labels
+        # therefore, we use argmax of the output
         else:
             output = np.argmax(output, axis=1)
             output = output.astype(np.float64, copy=False)
 
+        # flag for setting log-output or normal output
         if self.log_ouput:
             output /= self.prior    # divide through prior to get pseudo-likelihood
             output = np.log(output)
         return output
 
     def _create_session(self):
+        """
+        Create interactive session to save space on gpu
+        """
         self._session = tf.InteractiveSession()
 
     def _create_graph(self):
+        """
+        Create graph and load model (file comes out of the training)
+        """
         saver = tf.train.import_meta_graph(self._checkpoint_folder + '/' + self._meta_file)
         saver.restore(self._session, tf.train.latest_checkpoint(self._checkpoint_folder))
         self._graph = tf.get_default_graph()
 
     def _create_list(self, folder_name):
+        """
+        Takes a folder and create a list of all the files in the folder
+        The list is sorted in natural sort order
+
+        :param folder_name: path to folder, to get list of
+        """
         self.list_path = [folder_name + s for s in os.listdir(folder_name)]
 
         # sort list for later processing
@@ -141,6 +174,12 @@ class TrainedModel(object):
         self.list_path.sort(key=lambda key: [convert(c) for c in re.split('([0-9]+)', key)])
 
     def _set_global_stats(self, file):
+        """
+        Set the mean and the variance in the class
+
+        :param file: path to stats file (kaldi-format, must contain the keys 'mean' and 'var')
+        :return:
+        """
         for key, mat in kaldi_io.read_mat_ark(file):
             if key == 'mean':
                 print('Setting mean')
@@ -152,7 +191,14 @@ class TrainedModel(object):
                 print('No mean or var set!!!')
 
     def _set_probabilities(self, file):
-        # read in P(s_k|m_j) from training
+        # TODO hard coded for getting class counts --> make sure that file class.counts exists
+        # TODO and contains the key class_counts
+        """
+        Set P(s_k|m_j) and prior P(s_k) from training
+
+        :param file: path to P(s_k|m_j) file (kaldi-format, must contain the key 'p_s_m')
+        """
+        # Set P(s_k|m_j)
         for key, mat in kaldi_io.read_mat_ark(file):
             if key == 'p_s_m':
                 print('Setting P(s_k|m_j)')
@@ -160,7 +206,7 @@ class TrainedModel(object):
             else:
                 print('No probability found')
 
-        # TODO hard coded for getting class counts
+        # Set prior P(s_k)
         for key, mat in kaldi_io.read_mat_ark('../class.counts'):
             if key == 'class_counts':
                 print('Setting Prior')
@@ -169,9 +215,19 @@ class TrainedModel(object):
                 print('No Prior found')
 
     def _normalize_data(self, data_array):
+        """
+        Normalize data using global mean and variance
+
+        :param data_array: numpy data matrix
+        """
         return (data_array - self.global_mean) / self.global_var
 
     def _get_checkpoint_data(self, checkpoint):
+        """
+        Find the last checkpoint for loading model
+
+        :param path to checkpoint file
+        """
         assert type(checkpoint) == str
 
         # split string

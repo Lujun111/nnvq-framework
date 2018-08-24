@@ -28,4 +28,4 @@ exponential_decay = False
 vqing = False
 sampling_discrete = False
 # create P(s_k|m_j) from training data
-create_conditioned_prob = True
+create_conditioned_prob = False

@@ -9,6 +9,7 @@ class Model(object):
         self.cb_size = None
         self.train = tf.placeholder(tf.bool, name="is_train")
         self.inference = []
+        self.inference_learned = []
         self.wo_soft = []
         self.input_batch = input_batch
 
@@ -21,6 +22,7 @@ class Model(object):
         :return y: output network
         """
 
+        # Start here to define your network
         num_neurons = 512
         # self.input_batch = tf.Print(self.input_batch, [self.input_batch])
 
@@ -30,12 +32,12 @@ class Model(object):
         # fc1_dropout = tf.layers.dropout(fc1_bn, rate=0.3, training=self.train)
         fc2 = tf.layers.dense(fc1_bn, num_neurons, activation=tf.nn.relu)
         fc2_bn = tf.layers.batch_normalization(fc2, training=self.train, center=False, scale=False)
-        # # fc2_dropout = tf.layers.dropout(fc2_bn, rate=0.3, training=self.train)
-        # fc3 = tf.layers.dense(fc2_bn, num_neurons, activation=tf.nn.leaky_relu)
-        # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train)
+        # fc2_dropout = tf.layers.dropout(fc2_bn, rate=0.3, training=self.train)
+        # fc3 = tf.layers.dense(fc2_bn, num_neurons, activation=tf.nn.relu)
+        # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train, center=False, scale=False)
         # #
-        # fc4 = tf.layers.dense(fc3_bn, num_neurons, activation=tf.nn.sigmoid)
-        # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train)
+        # fc4 = tf.layers.dense(fc3_bn, num_neurons, activation=tf.nn.relu)
+        # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
         # #
         # fc5 = tf.layers.dense(fc4_bn, num_neurons, activation=tf.nn.sigmoid)
         # fc5_bn = tf.layers.batch_normalization(fc5, training=self.train)
@@ -50,16 +52,10 @@ class Model(object):
         out_scaled = tf.scalar_mul(self.scale, out)
         self.wo_soft = out_scaled
         self.inference = tf.nn.softmax(out_scaled, name='nn_output')
-        # self.inference = tf.clip_by_value(self.inference, 1e-20, 0.99999, name='nn_output')
-        # self.inference = tf.Print(self.inference, [self.inference], summarize=400)
-        # self.inference = self._scaled_softmax(fc2)
+        self.inference_learned = tf.layers.dense(self.inference, 127, activation=tf.nn.sigmoid)
+        # self.inference_learned = tf.Print(self.inference_learned, [self.inference_learned], summarize=127)
 
-    # def _scaled_softmax(self, logits):
-    #     # do scaled softmax
-    #     nominator = tf.exp(self.scale * logits)
-    #     denominator = tf.reduce_sum(tf.exp(self.scale * logits), axis=1)
-    #     scaled_soft = tf.divide(nominator, tf.expand_dims(denominator, 1), name='nn_output')
-    #     return scaled_soft
+        # end of definition of network
 
     def loss(self, phoneme_batch, log_cn_pr):
         output_nn = self.inference
@@ -109,16 +105,18 @@ class Model(object):
         #                                        axes=1), self.wo_soft)
         # ----
         # works with normal cond_prob
-        loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-                                           tf.log(tf.tensordot(self.inference, tf.transpose(new_cond), axes=1)),
-                                           reduction_indices=[1]))
+        # loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
+        #                                    tf.log(tf.tensordot(self.inference, tf.transpose(new_cond), axes=1)),
+        #                                    reduction_indices=[1]))
         # ---
 
-        # --- RMS loss
-        # loss = tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(tf.one_hot(tf.squeeze(phoneme_batch), 41, axis=1),
-        #                                                     tf.tensordot(self.inference, tf.transpose(new_cond), axes=1)))))
-        # ---
-        # loss = tf.losses.softmax_cross_entropy(gather_data, self.wo_soft)
+        # --- loss test with learned output layer
+        # loss = tf.losses.mean_squared_error(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1),
+        #                                     self.inference_learned)
+        loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
+                                           tf.log(self.inference_learned),
+                                           reduction_indices=[1]))
+
 
         return loss
 
