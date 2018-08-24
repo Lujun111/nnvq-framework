@@ -1,19 +1,39 @@
 import tensorflow as tf
-import numpy as np
-from kaldi_io import kaldi_io
 
 
 class MiscNN(object):
-    def __init__(self, codebook_size):
-        self.cb_size = codebook_size
+    """
+    MiscNN object contains auxiliary functions which are needed for
+    logging and to compute functions in the graph
+    """
+    def __init__(self, codebook_size, num_labels):
+        """
+        Init MiscNN
 
-    def calculate_mi_tf(self, y_nn, phonemes):
+        :param codebook_size: size of the codebook
+        :param num_labels:    number of labels (e.g. for monophone states=127)
+        """
+        self.cb_size = codebook_size
+        self.num_labels = num_labels
+
+    def calculate_mi_tf(self, y_nn, labels):
+        """
+        Calculate the mutual information between the neural net output and
+        the labels (phonemes/states)
+
+        :param y_nn:    output of the neural net
+        :param labels:  phonemes or states of the data (coming from the alignments of kaldi)
+        :return:        mutual information
+        """
         alpha = 1.0
         beta = -1.0
 
-        # get p_w, p_y and p_w_y from helper
-        p_w, p_y, p_w_y = self._helper_mi_tf(y_nn, phonemes)
+        # take the argmax of y_nn to get the class label determined by the
+        # neural network
+        y_labels = tf.argmax(y_nn, axis=1)
 
+        # get p_w, p_y and p_w_y from helper
+        p_w, p_y, p_w_y = self._helper_mi_tf(y_labels, labels)
 
         # normalize
         p_w /= tf.reduce_sum(p_w)
@@ -21,7 +41,7 @@ class MiscNN(object):
         p_w_y = tf.divide(p_w_y,
                           tf.expand_dims(tf.clip_by_value(tf.reduce_sum(p_w_y, axis=1),
                                                           1e-8, 1e6), 1))
-        # # H(Y) on log2 base
+        # H(Y) on log2 base
         h_y = tf.multiply(p_y, tf.log(tf.clip_by_value(p_y, 1e-8, 1e6)) / tf.log(2.0))
         h_y = tf.reduce_sum(h_y)
 
@@ -30,130 +50,168 @@ class MiscNN(object):
         h_w = tf.reduce_sum(h_w)
 
         # H(W|Y) on log2 base
-        h_w_y = p_w_y * tf.log(tf.clip_by_value(p_w_y, 1e-12, 1e6)) / tf.log(2.0)  # log2 base
-        h_w_y = tf.reduce_sum(h_w_y, axis=0)  # reduce sum
+        h_w_y = p_w_y * tf.log(tf.clip_by_value(p_w_y, 1e-12, 1e6)) / tf.log(2.0)
+        h_w_y = tf.reduce_sum(h_w_y, axis=0)
         h_w_y = tf.multiply(p_y, h_w_y)
         h_w_y = tf.reduce_sum(h_w_y)
 
         return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
 
-    def _helper_mi_tf(self, labels, alignments):
-        p = 127
+    def _helper_mi_tf(self, y_labels, labels):
+        """
+        Create P(w), P(y) and P(w|y) using the output labels of the neural network
+        For deeper understanding how we create these probability, please check the
+        TF-API
 
-        pwtmp = tf.Variable(tf.zeros(p), trainable=False, dtype=tf.float32)
+        :param y_labels:                output labels of the neural net
+        :param labels:                  phonemes or states of the data (coming from the alignments of kaldi)
+        :return pwtmp, pytmp, pw_y_tmp: return P(w), P(y) and P(w|y)
+        """
+
+        # define tf variables to use scatter_nd and scatter_nd_add
+        pwtmp = tf.Variable(tf.zeros(self.num_labels), trainable=False, dtype=tf.float32)
         pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
-        pw_y_tmp = tf.Variable(tf.zeros([p, self.cb_size]), trainable=False, dtype=tf.float32)
+        pw_y_tmp = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
 
-        # use input array as indexing array
-        pwtmp = pwtmp.assign(tf.fill([p], 0.0))  # reset Variable/floor
-        pwtmp = tf.scatter_add(pwtmp, alignments, tf.ones(tf.shape(alignments)))
+        # create P(w)
+        pwtmp = pwtmp.assign(tf.fill([self.num_labels], 0.0))  # reset Variable/floor
+        pwtmp = tf.scatter_add(pwtmp, labels, tf.ones(tf.shape(labels)))
 
+        # create P(y)
         pytmp = pytmp.assign(tf.fill([self.cb_size], 0.0))  # reset Variable/floor
-        pytmp = tf.scatter_add(pytmp, labels, tf.ones(tf.shape(labels)))
+        pytmp = tf.scatter_add(pytmp, y_labels, tf.ones(tf.shape(y_labels)))
 
-        pw_y_tmp = pw_y_tmp.assign(tf.fill([p, self.cb_size], 0.0))  # reset Variable/floor
+        # create P(w|y)
+        pw_y_tmp = pw_y_tmp.assign(tf.fill([self.num_labels, self.cb_size], 0.0))  # reset Variable/floor
         pw_y_tmp = tf.scatter_nd_add(pw_y_tmp,
-                                     tf.concat([tf.cast(alignments, dtype=tf.int64), tf.expand_dims(labels, 1)],
-                                               axis=1), tf.ones(tf.shape(labels)))
-        # adding to graph
-        tf.identity(pwtmp, 'p_w')
-        tf.identity(pytmp, 'p_y')
-        tf.identity(pw_y_tmp, 'p_yw')
+                                     tf.concat([tf.cast(labels, dtype=tf.int64), tf.expand_dims(y_labels, 1)],
+                                               axis=1), tf.ones(tf.shape(y_labels)))
+
+        # adding to graph for visualisation in tensorboard
+        tf.identity(pwtmp, 'P(w)')
+        tf.identity(pytmp, 'P(y)')
+        tf.identity(pw_y_tmp, 'P(w|y)')
 
         return pwtmp, pytmp, pw_y_tmp
 
-    def conditioned_probability(self, output_nn, phonemes, discrete=False):
-        p = 127  # num of phones
+    def conditioned_probability(self, y_nn, labels, discrete=False):
+        """
+        Create the conditioned probability P(s_k|m_j) using the output of the neural network
+        and the target labels coming out of kaldi
+
+        :param y_nn:        output of the neural net
+        :param labels:      phonemes or states of the data (coming from the alignments of kaldi)
+        :param discrete:    flag for creating P(s_k|m_j) in the discrete way (check dissertation
+                            of Neukirchen, p.62 (5.51))
+        :return:            return P(s_k|m_j)
+        """
+        # small delta for smoothing P(s_k|m_j), necessary if we log the probability
         eps = 0.01
 
-        # get data
-        phonemes = tf.cast(phonemes, dtype=tf.int32)  # cast to int and put them in [[alignments]]
+        # cast labels into int32
+        labels = tf.cast(labels, dtype=tf.int32)  # cast to int and put them in [[alignments]]
 
-        # create var for joint probability
-        nominator = tf.Variable(tf.zeros([p, self.cb_size]), trainable=False, dtype=tf.float32, name='nom_test')
-        nominator = nominator.assign(tf.fill([p, self.cb_size], eps))  # reset Variable/floor
+        # create variable in order to use scatter_nd_add and scatter_add (discrete creation of P(s_k|m_j))
+        nominator = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32, name='nom_test')
+        nominator = nominator.assign(tf.fill([self.num_labels, self.cb_size], eps))  # reset Variable/floor
         denominator = tf.Variable(tf.zeros([self.cb_size]), trainable=False, dtype=tf.float32, name='den_test')
-        denominator = denominator.assign(tf.fill([self.cb_size], p * eps))  # reset Variable/floor
-
-        output_dis = None
-        if discrete:
-            output_dis = tf.argmax(output_nn, axis=1)
+        denominator = denominator.assign(tf.fill([self.cb_size], self.num_labels * eps))  # reset Variable/floor
 
         if discrete:
-            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(phonemes, dtype=tf.int64),
+            # discretize the output of the neural network
+            output_dis = tf.argmax(y_nn, axis=1)
+
+            # get nominator
+            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int64),
                                                                 tf.expand_dims(output_dis, 1)],
                                                                axis=1), tf.ones(tf.shape(output_dis)))
+            # get denominator
             denominator = tf.scatter_add(denominator, output_dis, tf.ones(tf.shape(output_dis)[0]))
-            # nominator = tf.Print(nominator, [tf.shape(nominator)])
-            # denominator = tf.Print(denominator, [denominator], summarize=400, message='t1')
-            # denominator_tmp = tf.reduce_sum(output_nn, axis=0)
-            # denominator = tf.Print(denominator, [denominator], summarize=400, message='t2')
 
-        else:
-            nominator = tf.scatter_nd_add(nominator, phonemes, output_nn)
-            denominator = tf.reduce_sum(output_nn, axis=0)
-            denominator += p * eps
-
-        if discrete:
+            # create P(s_k|m_j) in the discrete way
             conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+
         else:
+            # get nominator
+            nominator = tf.scatter_nd_add(nominator, labels, y_nn)
+
+            # get denominator
+            denominator = tf.reduce_sum(y_nn, axis=0)
+
+            # smoothing the probability
+            denominator += self.num_labels * eps
+
+            # create P(s_k|m_j) in the continuous way
             conditioned_prob = tf.divide(nominator, denominator)
-        # conditioned_prob = tf.Print(conditioned_prob, [tf.reduce_max(conditioned_prob)])
 
         return conditioned_prob
 
-    def joint_probability(self, output_nn, phonemes):
-        # j is size of codebook
-        p = 127  # num of phones
-        batch_size = tf.cast(tf.shape(output_nn)[0], dtype=tf.float32)  # input size
+    def joint_probability(self, y_nn, labels):
+        # TODO I don't know if it works properly because I only use it for logging
+        """
+        Create joint probability P(s_k, m_j)
 
-        # create var for joint probability
-        joint_prob = tf.Variable(tf.zeros([p, self.cb_size]), trainable=False, dtype=tf.float32)
-        joint_prob = joint_prob.assign(tf.fill([p, self.cb_size], 0.0))  # reset Variable/floor
+        :param y_nn:    output of the neural net
+        :param labels:  phonemes or states of the data (coming from the alignments of kaldi)
+        :return:        return P(s_k, m_j)
+        """
 
+        # determine batch size
+        batch_size = tf.cast(tf.shape(y_nn)[0], dtype=tf.float32)
 
-        # get data
-        phonemes = tf.cast(phonemes, dtype=tf.int32)  # cast to int and put them in [[alignments]]
+        # create variable in order to use scatter_nd_add
+        joint_prob = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
+        joint_prob = joint_prob.assign(tf.fill([self.num_labels, self.cb_size], 0.0))  # reset Variable/floor
 
-        # add to sclices
-        joint_prob = tf.scatter_nd_add(joint_prob, phonemes, output_nn)
+        # cast labels to int32
+        labels = tf.cast(labels, dtype=tf.int32)
 
+        # create P(s_k, m_j), (check dissertation of Neukirchen, p.61 (5.46))
+        joint_prob = tf.scatter_nd_add(joint_prob, labels, y_nn)
         joint_prob = tf.div(joint_prob, batch_size)
 
         return joint_prob
 
-    def vq_data(self, output_nn, phonemes, nominator, denominator):
-        p = 127  # num of phones
-        eps = 0.5
+    def vq_data(self, y_nn, labels, nominator, denominator, discrete=True):
+        """
+        Create the nominator and denominator for P(s_k|m_j)
+        This function is used for using all the training data to create P(s_k|m_j)
 
-        # get data
-        phonemes = tf.cast(phonemes, dtype=tf.int64)  # cast to int and put them in [[alignments]]
+        :param y_nn:        output of the neural net
+        :param labels:      phonemes or states of the data (coming from the alignments of kaldi)
+        :param nominator:   nominator for P(s_k|m_j)
+        :param denominator: denominator for P(s_k|m_j)
+        :param discrete:    flag for creating P(s_k|m_j) in a discrete way
+        :return:            return nominator and denominator of creating P(s_k|m_j)
+        """
+        # cast labels to int32
+        labels = tf.cast(labels, dtype=tf.int32)
 
-        # create var for joint probability
-
-        #   # reset Variable/floor
-        # con_prob = tf.divide(con_prob, tf.add(p * eps, tf.reduce_sum(input, axis=0)))
-
-        labels_softmax = tf.argmax(output_nn, axis=1)
+        y_labels = tf.argmax(y_nn, axis=1)
         # labels_softmax = output_soft
 
-        nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(phonemes, dtype=tf.int64),
-                                                            tf.expand_dims(labels_softmax, 1)],
-                                                           axis=1), tf.ones(tf.shape(labels_softmax)))
-        # nominator = tf.scatter_nd_add(nominator, alignments, labels_softmax)
+        if discrete:
+            # create nominator
+            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int32),
+                                                                tf.expand_dims(y_labels, 1)],
+                                                               axis=1), tf.ones(tf.shape(y_labels)))
 
-
-        # denominator = denominator.assign(tf.fill([cb], 0.0))  # reset Variable/floor
-        denominator = tf.scatter_add(denominator, labels_softmax, tf.ones(tf.shape(labels_softmax)[0]))
-        #
-        # denominator = tf.reduce_sum(labels_softmax, axis=0)
-        # denominator += p * eps
-
-        # conditioned_prob = tf.divide(nominator, denominator)
+            # create dominator
+            denominator = tf.scatter_add(denominator, y_labels, tf.ones(tf.shape(y_labels)[0]))
+        else:
+            raise NotImplementedError("Not implemented!")
 
         return nominator, denominator
 
     def testing_stuff(self, output_nn, cond_prob, phonemes):
+        """
+        deprecated!
+
+        :param output_nn:
+        :param cond_prob:
+        :param phonemes:
+        :return:
+        """
         # labels_softmax = output_nn
         phonemes = tf.cast(phonemes, dtype=tf.int32)
         cond_prob = tf.transpose(cond_prob)

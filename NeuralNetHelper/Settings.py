@@ -11,7 +11,7 @@ path_checkpoint = 'model_checkpoint'
 path_meta = 'meta_data'
 
 # Hyperparameter
-num_phonemes = 127
+num_labels = 127
 delta = 0.01    # delta for P(s_k|m_j)
 codebook_size = 400
 batch_size = 15000

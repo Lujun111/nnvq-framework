@@ -31,8 +31,6 @@ features_train, labels_train = train_feeder.iterator.get_next()
 features_test, labels_test = test_feeder.iterator.get_next()
 features_dev, labels_dev = dev_feeder.iterator.get_next()
 
-Settings.vqing = False
-
 # placeholders for model and for later inference
 # training = tf.placeholder(tf.bool, shape=[], name='ph_training')
 features = tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features')
@@ -46,9 +44,8 @@ if Settings.vqing:
     log_prob = tf.placeholder(tf.float32, shape=[Settings.num_phonemes, Settings.codebook_size], name='prob')
 
 # define model
-model = Model(features)
-model.build_model(Settings.scale_soft, Settings.codebook_size)
-misc = MiscNN(Settings.codebook_size)
+model = Model(features, Settings.scale_soft, Settings.codebook_size)
+misc = MiscNN(Settings.codebook_size, Settings.num_labels)
 # model_train = tf.estimator.Estimator(model_fn=model.inference)
 # y = model.inference(features)
 y = model.inference
@@ -61,7 +58,7 @@ data_vqed = misc.vq_data(y, labels, nom_var, den_var)
 
 
 # mutual information
-mutual_info = misc.calculate_mi_tf(tf.argmax(y, axis=1), tf.cast(labels, dtype=tf.int32))
+mutual_info = misc.calculate_mi_tf(y, tf.cast(labels, dtype=tf.int32))
 
 cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
 testing = misc.testing_stuff(y, cond_prob, labels)
@@ -75,9 +72,9 @@ testing = misc.testing_stuff(y, cond_prob, labels)
 loss = None
 if Settings.vqing:
     # loss = model.loss(labels, log_prob)
-    loss = model.new_loss(labels, cond_prob)
+    loss = model.loss(labels, cond_prob)
 else:
-    loss = model.new_loss(labels, cond_prob)
+    loss = model.loss(labels, cond_prob)
     # l2_loss = tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables()])
     # loss += 1e-5 * l2_loss
 # print(loss)
@@ -149,20 +146,10 @@ for i in range(Settings.epoch_size):
 
                 nom_vq, den_vq = sess.run(data_vqed, feed_dict={"is_train:0": False, features: feat,
                                                                          labels: labs, lr: Settings.learning_rate})
-                # nom_vq, den_vq = vqing[0], vqing[1]
-                # print(y_print)
-                # print(bat_nom)
-                # count_mi += 1
-                # if count_mi > 20:
-                #     nom_vq += 0.5
-                #     den_vq += 41 * 0.5
-                #     prob = nom_vq / den_vq
-                #     # reset den and nom
-                #     sess.run([nom_init, den_init])
-                #     break
+
             except tf.errors.OutOfRangeError:
-                nom_vq += 0.01
-                den_vq += 127 * 0.01
+                nom_vq += Settings.delta
+                den_vq += Settings.num_labels * Settings.delta
                 prob = nom_vq / den_vq
 
                 # reset den and nom
