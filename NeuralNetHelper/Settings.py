@@ -1,4 +1,6 @@
-
+"""
+Setting file to define global variables
+"""
 
 
 # path to data

@@ -5,13 +5,13 @@ import os
 import pandas as pd
 import re
 import numpy as np
-import string
 from kaldi_io import kaldi_io
 from KaldiHelper.IteratorHelper import DataIterator
 from KaldiHelper.MiscHelper import Misc
 
 
 # TODO no path and file checking so far
+# TODO pytorch inference
 class TrainedModel(object):
     """
         TrainedModel for performing the inference after training
