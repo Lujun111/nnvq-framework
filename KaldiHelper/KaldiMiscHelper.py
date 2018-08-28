@@ -1,6 +1,7 @@
 import pandas as pd
 import collections
-import re
+import sys
+import argparse
 import numpy as np
 from kaldi_io import kaldi_io
 from KaldiHelper.IteratorHelper import DataIterator, AlignmentIterator
@@ -20,7 +21,6 @@ class KaldiMiscHelper(object):
             'mean': np.expand_dims(tmp_mean, 1),
             'std': np.expand_dims(tmp_std, 1)
         }
-        print(stats_dict)
         with open('stats.mat', 'wb') as f:
             for key, mat in list(stats_dict.items()):
                 kaldi_io.write_mat(f, mat.astype(np.float32, copy=False), key=key)
@@ -57,13 +57,12 @@ class KaldiMiscHelper(object):
             except StopIteration:
                 break
 
-    def merge_special(self, nj, path_data, path_phonemes, output_folder):
+    def concat_data(self, nj, path_data, path_phonemes, output_folder):
         dataset = DataIterator(nj, path_data)
 
         create_stats = True
-        if path_data == 'test' or 'dev':
+        if ('test' or 'dev') in path_data:
             create_stats = False
-            # adding_string = ''
 
         print('Loading alignment dict')
         alignment_dict = {}
@@ -75,9 +74,13 @@ class KaldiMiscHelper(object):
         count = 1
         tmp_dict = {}
         gather_data = []
+        print('Creating filtered training data and merge them with the labels')
         while True:
             try:
                 for key, mat in kaldi_io.read_mat_ark(dataset.next_file()):
+                    # we need to filter the training data because we don't have the alignments for all the
+                    # training data. Therefor, we have to avoid to use this data for training our HMMs
+                    # TODO Could also work with --> check performance difference
                     if key in list(alignment_dict.keys()) and \
                                     mat.shape[0] == alignment_dict[key].shape[0]:
                         tmp_dict[key] = pd.concat([pd.DataFrame(mat),
@@ -86,11 +89,11 @@ class KaldiMiscHelper(object):
 
                 od = collections.OrderedDict(sorted(tmp_dict.items()))
 
-                # write features + phonemes
+                # write filtered training data and the labels to files
                 with open(output_folder + '/feats_vq_' + str(count), 'wb') as f:
                     for key, mat in list(od.items()):
                         kaldi_io.write_mat(f, mat.values.astype(np.float32, copy=False), key=key)
-
+                # write the filtered training data
                 with open(output_folder + '/features_' + str(count), 'wb') as f:
                     for key, mat in list(od.items()):
                         kaldi_io.write_mat(f, mat.values.astype(np.float32, copy=False)[:, :39], key=key)
@@ -104,11 +107,37 @@ class KaldiMiscHelper(object):
                 break
 
 
+def main(arguments):
+    """
+    Create argument parser to execute python file from console
+    """
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    # add number of jobs / how the data is split
+    parser.add_argument('--nj', type=int, help='number of jobs', default=20)
+    # define source data folder where the features are saved
+    parser.add_argument('data', type=str, help='data folder which contains the features')
+    # define alignment folder where the labels for the training data are coming from
+    parser.add_argument('ali', type=str, help='alignment folder which contains the labels of the data')
+    # define the output folder where to save the concat data
+    parser.add_argument('out', type=str, help='output folder to save the concat data')
+    # parse all arguments to parser
+    args = parser.parse_args(arguments)
+
+    # print the arguments which we fed into
+    for arg in vars(args):
+        print("Argument {:14}: {}".format(arg, getattr(args, arg)))
+
+    # create object and perform task
+    kaldi_misc_helper = KaldiMiscHelper()
+    kaldi_misc_helper.concat_data(args.nj, args.data, args.ali, args.out)
+
 if __name__ == "__main__":
-    test = KaldiMiscHelper()
+    sys.exit(main(sys.argv[1:]))
+    # test = KaldiMiscHelper()
     # test.merge_data_phonemes(20, 'train_20kshort_nodup', '../alignments/nnet_labels/all_ali', '../')
     # test.merge_special(20, 'train_40kshort_nodup', '../alignments/tri3/all_ali', '../')
-    test.merge_special(30, 'dev', 'tmp/state_labels/all_ali_dev', 'tmp')
+    # test.concat_data(30, 'dev', 'tmp/state_labels/all_ali_dev', 'tmp')
     # test.merge_special(30, 'test', '../alignments/test/all_ali', '../')
     # test.merge_special(20, 'test', '../alignments/test/all_ali', '../')
     # test.merge_special(20, 'train_20kshort_nodup', 'tmp/state_labels/all_ali_train', 'tmp')

@@ -3,7 +3,9 @@
 """
 Calculate k-means.
 """
-import os, sys, argparse
+import os
+import sys
+import argparse
 import pandas as pd
 import pickle
 import copy
@@ -351,7 +353,7 @@ class KmeansVqMmi(object):
 
 
 def main(arguments):
-    parser = argparse.ArgumentParser( description=__doc__,
+    parser = argparse.ArgumentParser(description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-n", "--numjobs", nargs=2, type=int, help="number of jobs", default=10)
     parser.add_argument("-k", "--kaldiformat", help="use kaldi-formatted codebook-file", action="store_true")
@@ -380,7 +382,7 @@ def main(arguments):
         kmeans = KmeansVq(args.num_classes, multiple=args.multiple)
         kmeans.create_codebook(args.numjobs, args.inputdir)
         kmeans.save_pickle_codebook(args.outfile)
-    else :
+    else:
         print('vq not yet implemented')
 
 if __name__ == "__main__":
