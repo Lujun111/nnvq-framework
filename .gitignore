@@ -5,10 +5,17 @@ tensorboard
 meta_data
 tf_data
 tmp
-scripts
+scripts/tf_data
+scripts/tmp
+scripts/alignments
+scripts/log
 
 # files
 .idea
 backup_codebook
 
+# python
+__pycache__
+NeuralNetHelper/__pycache__
+KaldiHelper/__pycache__
 
