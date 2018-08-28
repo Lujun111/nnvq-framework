@@ -13,9 +13,9 @@ from NeuralNetHelper.DataFeedingHelper import DataFeeder
 
 # defining some operations
 global_step = tf.Variable(0, trainable=False)
-nom_var = tf.Variable(tf.zeros([Settings.num_phonemes, Settings.codebook_size]), trainable=False, dtype=tf.float32)
+nom_var = tf.Variable(tf.zeros([Settings.num_labels, Settings.codebook_size]), trainable=False, dtype=tf.float32)
 den_var = tf.Variable(tf.zeros([Settings.codebook_size]), trainable=False, dtype=tf.float32)
-nom_init = nom_var.assign(tf.fill([Settings.num_phonemes, Settings.codebook_size], 0.0))
+nom_init = nom_var.assign(tf.fill([Settings.num_labels, Settings.codebook_size], 0.0))
 den_init = den_var.assign(tf.fill([Settings.codebook_size], 0.0))
 
 # create iterator, select tfrecord-files for training, 3 feeding pipelines
@@ -181,6 +181,7 @@ for i in range(Settings.epoch_size):
                     [train_op, loss, merged, global_step, mutual_info, y, testing],
                     feed_dict={"is_train:0": True, features: feat, labels: labs, lr: Settings.learning_rate})
             # print(kernel)
+            # print(feat)
             # print(labs)
             # print(sess.run("BatchNorm/AssignMovingAvg_1:0"))
             if count % 100:

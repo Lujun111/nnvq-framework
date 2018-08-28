@@ -88,9 +88,9 @@ class MiscNN(object):
                                                axis=1), tf.ones(tf.shape(y_labels)))
 
         # adding to graph for visualisation in tensorboard
-        tf.identity(pwtmp, 'P(w)')
-        tf.identity(pytmp, 'P(y)')
-        tf.identity(pw_y_tmp, 'P(w|y)')
+        tf.identity(pwtmp, 'P_w')
+        tf.identity(pytmp, 'P_y')
+        tf.identity(pw_y_tmp, 'P_w_y_')
 
         return pwtmp, pytmp, pw_y_tmp
 
@@ -185,14 +185,14 @@ class MiscNN(object):
         :return:            return nominator and denominator of creating P(s_k|m_j)
         """
         # cast labels to int32
-        labels = tf.cast(labels, dtype=tf.int32)
+        labels = tf.cast(labels, dtype=tf.int64)
 
         y_labels = tf.argmax(y_nn, axis=1)
         # labels_softmax = output_soft
 
         if discrete:
             # create nominator
-            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int32),
+            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int64),
                                                                 tf.expand_dims(y_labels, 1)],
                                                                axis=1), tf.ones(tf.shape(y_labels)))
 

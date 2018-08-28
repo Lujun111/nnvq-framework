@@ -4,6 +4,7 @@ Setting file to define global variables
 
 
 # path to data
+# path_train = 'scripts/tf_data'
 path_train = 'tf_data/train_20k_state'
 path_test = 'tf_data/test_state'
 path_dev = 'tf_data/dev_state'

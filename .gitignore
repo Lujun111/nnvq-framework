@@ -5,6 +5,7 @@ tensorboard
 meta_data
 tf_data
 tmp
+scripts
 
 # files
 .idea
