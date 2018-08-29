@@ -5,7 +5,7 @@ class Model(object):
     """
     Creates a model object
     """
-    def __init__(self, input_batch, scale_softmax, codebook_size):
+    def __init__(self, input_batch, scale_softmax, codebook_size, restore):
         """
         Init the Model
 
@@ -13,13 +13,20 @@ class Model(object):
         """
         self.scale = scale_softmax
         self.cb_size = codebook_size
+        self.restore = restore
         self.train = tf.placeholder(tf.bool, name="is_train")
+        # self.train_out = tf.placeholder(tf.bool, name="train_out_layer")
         self.inference = []
         self.inference_learned = []
         self.wo_soft = []
         self.input_batch = input_batch
 
         # create model
+        # if self.restore:
+        #     self._build_restored_model()
+        # else:
+        #     self._build_model()
+
         self._build_model()
 
     def _build_model(self):
@@ -56,23 +63,36 @@ class Model(object):
         # ------------------------------------------------------------------
         # end of definition of network
 
-    def loss(self, phoneme_batch, new_cond):
+    def build_restored_model(self):
+
+        old_output = tf.get_default_graph().get_tensor_by_name('nn_output:0')
+        # old_output = tf.Print(old_output, [old_output], summarize=400)
+
+        # added layer
+        # self.inference = tf.layers.dense(old_output, 127, activation=tf.nn.sigmoid, name='mapping_layer')
+        self.inference = old_output
+
+    def loss(self, phoneme_batch, new_cond=None):
         phoneme_batch = tf.cast(phoneme_batch, dtype=tf.int32)  # cast to int and put them in [[alignments]]
 
         # ----
-        # works with normal cond_prob
-        used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-                                           tf.log(tf.tensordot(self.inference, tf.transpose(new_cond), axes=1)),
-                                           reduction_indices=[1]))
+        # train output layer to create P(s_k|m_j)
+        if self.restore:
+            # used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
+            #                                           tf.log(self.inference), reduction_indices=[1]))
+            used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
+                                                      tf.log(tf.tensordot(self.inference, tf.transpose(new_cond),
+                                                                          axes=1)), reduction_indices=[1]))
+
+        else:
+            # TODO no tf.assert for None
+            # used hand-made P(s_k|m_j)
+            used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
+                                                      tf.log(tf.tensordot(self.inference, tf.transpose(new_cond),
+                                                                          axes=1)), reduction_indices=[1]))
+
         # ---
 
-        # --- loss test with learned output layer
-        # loss = tf.losses.mean_squared_error(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1),
-        #                                     self.inference_learned)
-        # used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-        #                                    tf.log(self.inference_learned),
-        #                                    reduction_indices=[1]))
-        # ---
         return used_loss
 
     def _old_loss(self, phoneme_batch, log_cn_pr):

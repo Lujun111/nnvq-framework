@@ -11,6 +11,7 @@ path_dev = 'tf_data/dev_state'
 
 path_tensorboard = 'tensorboard'
 path_checkpoint = 'model_checkpoint'
+path_restore = path_checkpoint + '/best_model_127pdf'
 path_meta = 'meta_data'
 
 # Hyperparameter
@@ -28,6 +29,7 @@ learning_rate = 1e-5
 exponential_decay = False
 
 # train Network
+restore = True
 vqing = False
 sampling_discrete = False
 # create P(s_k|m_j) from training data

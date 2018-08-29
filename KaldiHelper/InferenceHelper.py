@@ -118,6 +118,13 @@ class TrainedModel(object):
         :param np_mat:  batch of data (e.g. data of size [N, dim_features])
         :return:        output of the network
         """
+        variables_names = [v.name for v in tf.trainable_variables()]
+        values = self._session.run(variables_names)
+        for k, v in zip(variables_names, values):
+            print("Variable: ", k)
+            print("Shape: ", v.shape)
+            print(v)
+
         # TODO check for None; normalize data (YES/NO)
         # normalize data
         np_mat = self._normalize_data(np_mat)
