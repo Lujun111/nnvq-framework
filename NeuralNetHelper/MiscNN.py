@@ -31,6 +31,7 @@ class MiscNN(object):
         # take the argmax of y_nn to get the class label determined by the
         # neural network
         y_labels = tf.argmax(y_nn, axis=1)
+        # y_labels = tf.Print(y_labels, [y_labels], summarize=400)
 
         # get p_w, p_y and p_w_y from helper
         p_w, p_y, p_w_y = self._helper_mi_tf(y_labels, labels)

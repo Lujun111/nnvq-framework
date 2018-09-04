@@ -118,29 +118,33 @@ class TrainedModel(object):
         :param np_mat:  batch of data (e.g. data of size [N, dim_features])
         :return:        output of the network
         """
-        variables_names = [v.name for v in tf.trainable_variables()]
-        values = self._session.run(variables_names)
-        for k, v in zip(variables_names, values):
-            print("Variable: ", k)
-            print("Shape: ", v.shape)
-            print(v)
+        # variables_names = [v.name for v in tf.trainable_variables()]
+        # values = self._session.run(variables_names)
+        # for k, v in zip(variables_names, values):
+        #     print("Variable: ", k)
+        #     print("Shape: ", v.shape)
+        #     print(v)
 
         # TODO check for None; normalize data (YES/NO)
         # normalize data
         np_mat = self._normalize_data(np_mat)
 
         # inference
-        output = self._session.run("nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-
+        # logits = self._graph.get_tensor_by_name('new_output/MatMul:0')
+        # print(logits)
+        output = self._session.run('new_nn_output:0', feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        # print(np.max(output, axis=1))
         # transform data with "continuous trick"
         # here same theory:
         # P(m_j) = output
         # P(o_k) = sum_j [ P(m_j) * P(s_k|m_j) ]
+        # TODO what to do if we have no transform
         if self.transform:
-            if self.cond_prob is not None:
-                output = np.dot(output, self.cond_prob)
-            else:
-                raise ValueError("cond_prob is None, please check!")
+            pass
+            # if self.cond_prob is not None:
+            #     output = np.dot(output, self.cond_prob)
+            # else:
+            #     raise ValueError("cond_prob is None, please check!")
         # if we don't do the "continuous trick" we output discrete labels
         # therefore, we use argmax of the output
         else:
@@ -210,6 +214,8 @@ class TrainedModel(object):
             if key == 'p_s_m':
                 print('Setting P(s_k|m_j)')
                 self.cond_prob = np.transpose(mat)  # we transpose for later dot product
+                # print(np.sum(self.cond_prob, axis=1))
+                # print(np.shape(np.sum(self.cond_prob, axis=1)))
             else:
                 print('No probability found')
 
@@ -259,7 +265,7 @@ if __name__ == "__main__":
                                                 'exp/test_400_0/vq_test')
     else:
         # continuous model
-        model_continuous = TrainedModel('../model_checkpoint/saved_model-99.meta', '../stats_20k.mat',
+        model_continuous = TrainedModel('../model_checkpoint/saved_model-8.meta', '../stats_20k.mat',
                                         '../p_s_m.mat',)
         # model_continuous.do_inference(20, 'features/train_20k/feats', '../tmp/tmp_testing')
         model_continuous.do_inference(30, 'test', '../tmp/tmp_testing')

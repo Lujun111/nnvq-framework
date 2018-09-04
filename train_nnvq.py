@@ -9,6 +9,7 @@ from NeuralNetHelper.MiscNN import MiscNN
 from NeuralNetHelper.ModelHelper import Model
 from NeuralNetHelper import Settings
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
+from NeuralNetHelper.ManagementHelper import Management
 
 
 # defining some operations
@@ -19,9 +20,16 @@ nom_init = nom_var.assign(tf.fill([Settings.num_labels, Settings.codebook_size],
 den_init = den_var.assign(tf.fill([Settings.codebook_size], 0.0))
 
 # create iterator, select tfrecord-files for training, 3 feeding pipelines
+dict_lists = {
+    'train': [Settings.path_train + '/' + s for s in os.listdir(Settings.path_train)],
+    'test': [Settings.path_test + '/' + s for s in os.listdir(Settings.path_test)],
+    'dev': [Settings.path_dev + '/' + s for s in os.listdir(Settings.path_dev)]
+}
 file_list_train = [Settings.path_train + '/' + s for s in os.listdir(Settings.path_train)]
 file_list_test = [Settings.path_test + '/' + s for s in os.listdir(Settings.path_test)]
 file_list_dev = [Settings.path_dev + '/' + s for s in os.listdir(Settings.path_dev)]
+
+feeder = DataFeeder(dict_lists, Settings)
 
 train_feeder = DataFeeder(file_list_train, Settings.batch_size, Settings.dim_features, Settings.dim_labels)
 test_feeder = DataFeeder(file_list_test, Settings.batch_size, Settings.dim_features, Settings.dim_labels)
@@ -31,41 +39,40 @@ features_train, labels_train = train_feeder.iterator.get_next()
 features_test, labels_test = test_feeder.iterator.get_next()
 features_dev, labels_dev = dev_feeder.iterator.get_next()
 
-# placeholders for model and for later inference
-# training = tf.placeholder(tf.bool, shape=[], name='ph_training')
-features = tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features')
 labels = tf.placeholder(tf.float32, shape=[None, Settings.dim_labels], name='ph_labels')
 lr = tf.placeholder(tf.float32, shape=[], name='learning_rate')
-
+# features = tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features')
+#
+#
 lr_decay = tf.train.exponential_decay(Settings.learning_rate, global_step, 400, 0.90, staircase=True)
 
 log_prob = None
 if Settings.vqing:
     log_prob = tf.placeholder(tf.float32, shape=[Settings.num_labels, Settings.codebook_size], name='prob')
-
-# -----------------------------
-
-
-# create saver
-# if Settings.restore:
-#     print('Restore old model and train it further')
-#     saver = tf.train.import_meta_graph(Settings.path_restore + '/saved_model-99.meta')
-#     saver.restore(sess, tf.train.latest_checkpoint(Settings.path_restore))
-#     graph = tf.get_default_graph()
-# else:
-#     print('Training new model')
-#     saver = tf.train.Saver()
-
-# ----------------------------------
-
+#
+# # -----------------------------
+#
+#
+# # create saver
+# # if Settings.restore:
+# #     print('Restore old model and train it further')
+# #     saver = tf.train.import_meta_graph(Settings.path_restore + '/saved_model-99.meta')
+# #     saver.restore(sess, tf.train.latest_checkpoint(Settings.path_restore))
+# #     graph = tf.get_default_graph()
+# # else:
+# #     print('Training new model')
+# #     saver = tf.train.Saver()
+#
+# # ----------------------------------
+#
 # define model
-model = Model(features, Settings.scale_soft, Settings.codebook_size, Settings.restore)
+model = Model(Settings)
 misc = MiscNN(Settings.codebook_size, Settings.num_labels)
 # model_train = tf.estimator.Estimator(model_fn=model.inference)
 # y = model.inference(features)
 y = model.inference
 # y = tf.Print(y, [tf.reduce_sum(tf.cast(tf.is_nan(y), dtype=tf.int32))])
-
+#
 # y = tf.Print(y, [tf.shape(y)])
 # model_train.train(features)
 # vqing data of the whole dataset
@@ -73,13 +80,14 @@ data_vqed = misc.vq_data(y, labels, nom_var, den_var)
 
 
 # mutual information
-mutual_info = misc.calculate_mi_tf(y, tf.cast(labels, dtype=tf.int32))
+mutual_info = misc.calculate_mi_tf(model.inference_learned, tf.cast(labels, dtype=tf.int32))
 # TODO loading only the weights, nothing more!
 if not Settings.restore:
     cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
     testing = misc.testing_stuff(y, cond_prob, labels)
 else:
-    cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
+    pass
+    # cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
     # cond_prob = [v for v in tf.trainable_variables() if v.name == "mapping_layer/kernel:0"][0]
     # [print(v.name) for v in tf.trainable_variables()]
     # cond_prob = tf.get_default_graph().get_tensor_by_name('mapping_layer/kernel:0')
@@ -95,7 +103,7 @@ else:
 # loss = model.loss(labels, log_prob)
 loss = None
 if Settings.restore:
-    loss = model.loss(labels, new_cond=cond_prob)
+    loss = model.loss(labels)
 else:
     if Settings.vqing:
         # loss = model.loss(labels, log_prob)
@@ -108,70 +116,68 @@ else:
 # loss += reg_term
 # loss += 1e-1 * mutual_info[2]
 tf.summary.scalar('train/loss', loss)
+# ----
 
-# joint_probability = misc.joint_probability(y, labels)
+joint_probability = misc.joint_probability(y, labels)
 # joint_probability = tf.Print(joint_probability, [tf.reduce_sum(tf.cast(tf.is_nan(joint_probability), dtype=tf.int32))])
-# conditioned_entropy = -tf.reduce_sum(joint_probability * tf.log(cond_prob))
-# tf.summary.scalar('misc/conditioned_entropy', conditioned_entropy)
+conditioned_entropy = -tf.reduce_sum(joint_probability * tf.log(cond_prob))
+tf.summary.scalar('misc/conditioned_entropy', conditioned_entropy)
 
+list_restore = [v for v in tf.trainable_variables()]
+print(list_restore[6:])
 update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 with tf.control_dependencies(update_ops):
     optimizer = tf.train.AdamOptimizer(learning_rate=lr)
-    # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.0)
-    gradients = optimizer.compute_gradients(loss)
+    # optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, momentum=0.50)
+    gradients = optimizer.compute_gradients(loss, var_list=list_restore[6:])    # list_restore[5:]
     train_op = optimizer.apply_gradients(gradients, global_step=global_step)
 
-# variables_names = [v.name for v in tf.trainable_variables()]
-# values = sess.run(variables_names)
-# for k, v in zip(variables_names, values):
-#     print("Variable: ", k)
-#     print("Shape: ", v.shape)
-#     print(v)
-
 # new_graph = tf.Graph()
-init = tf.global_variables_initializer()
-# init_local = tf.local_variables_initializer()
+# init = tf.global_variables_initializer()
+# # init_local = tf.local_variables_initializer()
 sess = tf.Session()
-# sess = tf_debug.TensorBoardDebugWrapperSession(sess, "tueimmk-apo6:7000")
-sess.run(init)
+# # sess = tf_debug.TensorBoardDebugWrapperSession(sess, "tueimmk-apo6:7000")
+# sess.run(init)
+
+
+saver = tf.train.Saver(list_restore[:6])
+# tf.reset_default_graph()
+if Settings.restore:
+    sess.run(tf.global_variables_initializer())
+    # saver = tf.train.import_meta_graph(Settings.path_restore + '/saved_model-99.meta')
+    # with tf.Session() as sess:
+    print('Restore old model and train it further')
+    # sess.run(tf.global_variables_initializer())
+    # graph = tf.get_default_graph()
+    saver.restore(sess, tf.train.latest_checkpoint(Settings.path_restore))
+    # sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+    print([x for x in tf.get_default_graph().get_operations() if x.type == "Placeholder"])
+    # print(sess.run(graph.get_tensor_by_name('dense/bias:0')))
+    # variables_names = [v.name for v in tf.trainable_variables()]
+    # values = sess.run(variables_names)
+    # for k, v in zip(variables_names, values):
+    #     print("Variable: ", k)
+    #     print("Shape: ", v.shape)
+    #     print(v)
+    # model.build_restored_model()
+    # print(tf.get_default_graph().get_tensor_by_name('nn_output:0'))
+    # sess = tf.Session(graph=tf.get_default_graph())
+else:
+    print('Training new model')
+    sess.run(tf.global_variables_initializer())
 
 # merge all summaries
 merged = tf.summary.merge_all()
 time_string = time.strftime('%d.%m.%Y - %H:%M:%S')
 train_writer = tf.summary.FileWriter(Settings.path_tensorboard + '/training_' + time_string, sess.graph)
 
-if Settings.restore:
-    saver = tf.train.import_meta_graph(Settings.path_restore + '/saved_model-99.meta')
-    with tf.Session() as sess1:
-        print('Restore old model and train it further')
-        graph = tf.get_default_graph()
-
-        saver.restore(sess1, tf.train.latest_checkpoint(Settings.path_restore))
-        sess1.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
-
-        print(sess1.run(graph.get_tensor_by_name('dense/bias:0')))
-        # variables_names = [v.name for v in tf.trainable_variables()]
-        # values = sess1.run(variables_names)
-        # for k, v in zip(variables_names, values):
-        #     print("Variable: ", k)
-        #     print("Shape: ", v.shape)
-        #     print(v)
-    # model.build_restored_model()
-    # print(tf.get_default_graph().get_tensor_by_name('nn_output:0'))
-    # sess = tf.Session(graph=tf.get_default_graph())
-else:
-    print('Training new model')
-    saver = tf.train.Saver()
-
-
-
+current_mi = -10.0
+count_mi = 0
+prob = None
+nom_vq = den_vq = None
 # training a new model
 if not Settings.restore:
     # optimizer.compute_gradients(zip(variables_names, values))
-    current_mi = -10.0
-    count_mi = 0
-    prob = None
-    nom_vq = den_vq = None
 
     # train
     for i in range(Settings.epoch_size):
@@ -191,7 +197,7 @@ if not Settings.restore:
 
                     # print(feat)
 
-                    nom_vq, den_vq = sess.run(data_vqed, feed_dict={"is_train:0": False, features: feat,
+                    nom_vq, den_vq = sess.run(data_vqed, feed_dict={"is_train:0": False, model.features: feat,
                                                                              labels: labs, lr: Settings.learning_rate})
 
                 except tf.errors.OutOfRangeError:
@@ -221,12 +227,12 @@ if not Settings.restore:
                 if Settings.vqing:
                     _, loss_value, summary, count, mi, y_print, test = sess.run(
                         [train_op, loss, merged, global_step, mutual_info, y, testing],
-                        feed_dict={"is_train:0": True, features: feat, labels: labs, lr: Settings.learning_rate,
+                        feed_dict={"is_train:0": True, model.features: feat, labels: labs, lr: Settings.learning_rate,
                                    log_prob: prob})
                 else:
                     _, loss_value, summary, count, mi, y_print, test = sess.run(
                         [train_op, loss, merged, global_step, mutual_info, y, testing],
-                        feed_dict={"is_train:0": True, features: feat, labels: labs, lr: Settings.learning_rate})
+                        feed_dict={"is_train:0": True, model.features: feat, labels: labs, lr: Settings.learning_rate})
                 # print(kernel)
                 # print(feat)
                 # print(labs)
@@ -272,7 +278,7 @@ if not Settings.restore:
 
                 # mi_test = sum_mi / count_mi
                 mi_vald, test_py, test_pw, test_pyw = sess.run([mutual_info, "p_y:0", "p_w:0", "p_yw:0"],
-                                                               feed_dict={"is_train:0": False, features: features_all,
+                                                               feed_dict={"is_train:0": False, model.features: features_all,
                                                                                 labels: labels_all})
                 print(mi_vald)
                 summary_tmp = tf.Summary()
@@ -311,7 +317,7 @@ if not Settings.restore:
             while True:
                 try:
                     feat, labs = sess.run([features_train, labels_train])
-                    nom_vq, den_vq = sess.run(data_vqed, feed_dict={"is_train:0": False, features: feat,
+                    nom_vq, den_vq = sess.run(data_vqed, feed_dict={"is_train:0": False, model.features: feat,
                                                                     labels: labs, lr: Settings.learning_rate})
 
                 except tf.errors.OutOfRangeError:
@@ -350,13 +356,20 @@ else:
                 if Settings.exponential_decay:
                     Settings.learning_rate = new_lr
 
-                _, loss_value, summary, count, mi, y_print = sess.run(
-                    [train_op, loss, merged, global_step, mutual_info, y],
-                    feed_dict={"is_train:0": True, features: feat, labels: labs, lr: Settings.learning_rate})
-                # print(kernel)
+                _, loss_value, summary, count, mi, y_print, y_debug = sess.run(
+                    [train_op, loss, merged, global_step, mutual_info, model.inference_learned, model.inference],
+                    feed_dict={"is_train:0": True, model.features: feat, labels: labs, lr: Settings.learning_rate})
+                # print(np.max(y_debug, axis=1))
                 # print(feat)
                 # print(labs)
                 # print(sess.run("BatchNorm/AssignMovingAvg_1:0"))
+                # variables_names = [v.name for v in tf.trainable_variables()]
+                # values = sess.run(variables_names)
+                # for k, v in zip(variables_names, values):
+                #     if k == 'dense/bias:0':
+                #         print("Variable: ", k)
+                #         print("Shape: ", v.shape)
+                #         print(v[0])
                 if count % 100:
                     train_writer.add_summary(summary, count)
                     summary_tmp = tf.Summary()
@@ -377,4 +390,54 @@ else:
                 summary_tmp = tf.Summary()
                 train_writer.add_summary(summary_tmp, count)
                 train_writer.flush()
+                break
+
+        sum_mi = 0.0
+        features_all = []
+        labels_all = []
+        print('Doing validation...')
+        # model.train = False
+        while True:
+            try:
+                feat, labs = sess.run([features_dev, labels_dev])
+                features_all.append(feat)
+                labels_all.append(labs)
+
+            except tf.errors.OutOfRangeError:
+                # reshape data
+                features_all = np.concatenate(features_all)
+                labels_all = np.concatenate(labels_all)
+
+                # mi_test = sum_mi / count_mi
+                mi_vald = sess.run(mutual_info, feed_dict={"is_train:0": False, model.features: features_all,
+                                                             labels: labels_all})
+                print(mi_vald)
+                summary_tmp = tf.Summary()
+                summary_tmp.value.add(tag='validation/mutual_information', simple_value=mi_vald[0])
+                train_writer.add_summary(summary_tmp, count)
+                train_writer.flush()
+
+                # print(count_mi)
+                if mi_vald[0] > current_mi:
+                    print('Saving better model...')
+                    saver = tf.train.Saver()
+                    saver.save(sess, Settings.path_checkpoint + '/saved_model', global_step=i)
+                    current_mi = mi_vald[0]
+                    # learning_rate *= 1e-1
+                # else:
+                #     count_mi += 1
+                #     # print('Count MI: ' + str(count_mi))
+                #     if count_mi > 2:
+                #         learning_rate *= 1e-1
+                #         print('Reducing learning rate to ' + str(learning_rate))
+                #         count_mi = 0
+
+                # save counts of
+                # tmp_pywtest = pd.DataFrame(test_py)
+                # tmp_pywtest.to_csv(Settings.path_meta + '/py_nnvq.txt', header=False, index=False)
+                # tmp_pywtest = pd.DataFrame(test_pw)
+                # tmp_pywtest.to_csv(Settings.path_meta + '/pw_nnvq.txt', header=False, index=False)
+                # tmp_pywtest = pd.DataFrame(test_pyw)
+                # tmp_pywtest.to_csv(Settings.path_meta + '/pwy_nnvq.txt', header=False, index=False)
+
                 break

@@ -25,11 +25,12 @@ dim_labels = 1
 
 # Network parameter
 scale_soft = 20.0
-learning_rate = 1e-5
+learning_rate = 1e-2
 exponential_decay = False
 
 # train Network
 restore = True
+train_prob = True
 vqing = False
 sampling_discrete = False
 # create P(s_k|m_j) from training data

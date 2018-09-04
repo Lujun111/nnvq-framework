@@ -1,32 +1,30 @@
 import tensorflow as tf
+# import tensorflow_probability as tfp
 
 
 class Model(object):
     """
     Creates a model object
     """
-    def __init__(self, input_batch, scale_softmax, codebook_size, restore):
+    def __init__(self, settings):
         """
         Init the Model
 
         :param input_batch: size of batch
         """
-        self.scale = scale_softmax
-        self.cb_size = codebook_size
-        self.restore = restore
+        # set settings
+        self.settings = settings
+
+        # input placeholders
         self.train = tf.placeholder(tf.bool, name="is_train")
-        # self.train_out = tf.placeholder(tf.bool, name="train_out_layer")
+        self.features = tf.placeholder(tf.float32, shape=[None, self.settings.dim_features], name='ph_features')
+
+        # output of model
         self.inference = []
         self.inference_learned = []
         self.wo_soft = []
-        self.input_batch = input_batch
 
         # create model
-        # if self.restore:
-        #     self._build_restored_model()
-        # else:
-        #     self._build_model()
-
         self._build_model()
 
     def _build_model(self):
@@ -42,7 +40,7 @@ class Model(object):
         # ------------------------------------------------------------------
         num_neurons = 512
 
-        fc1 = tf.layers.dense(self.input_batch, num_neurons, activation=tf.nn.relu)
+        fc1 = tf.layers.dense(self.features, num_neurons, activation=tf.nn.relu)
         fc1_bn = tf.layers.batch_normalization(fc1, training=self.train, center=False, scale=False)
 
         # fc1_dropout = tf.layers.dropout(fc1_bn, rate=0.3, training=self.train)
@@ -51,48 +49,43 @@ class Model(object):
         # fc2_dropout = tf.layers.dropout(fc2_bn, rate=0.3, training=self.train)
 
         # WTA-layer starts here
-        out = tf.layers.dense(fc2_bn, self.cb_size, activation=tf.nn.sigmoid)
-        out_scaled = tf.scalar_mul(self.scale, out)
+        out = tf.layers.dense(fc2_bn, self.settings.codebook_size, activation=tf.nn.sigmoid)
+        out_scaled = tf.scalar_mul(self.settings.scale_soft, out)
         # output without softmax
-        self.wo_soft = out_scaled
+        # self.wo_soft = out_scaled
         # output with soft, be aware use a name 'nn_output' for the output node!
         self.inference = tf.nn.softmax(out_scaled, name='nn_output')
+
         # learn the mapping
-        self.inference_learned = tf.layers.dense(self.inference, 127, activation=tf.nn.sigmoid)
+        if self.settings.train_prob:
+            self.wo_soft = tf.layers.dense(self.inference, 127, activation=None)
+            self.inference_learned = tf.nn.softmax(self.wo_soft, name='new_nn_output')
 
         # ------------------------------------------------------------------
         # end of definition of network
-
-    def build_restored_model(self):
-
-        old_output = tf.get_default_graph().get_tensor_by_name('nn_output:0')
-        # old_output = tf.Print(old_output, [old_output], summarize=400)
-
-        # added layer
-        # self.inference = tf.layers.dense(old_output, 127, activation=tf.nn.sigmoid, name='mapping_layer')
-        self.inference = old_output
 
     def loss(self, phoneme_batch, new_cond=None):
         phoneme_batch = tf.cast(phoneme_batch, dtype=tf.int32)  # cast to int and put them in [[alignments]]
 
         # ----
         # train output layer to create P(s_k|m_j)
-        if self.restore:
-            # used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-            #                                           tf.log(self.inference), reduction_indices=[1]))
-            used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-                                                      tf.log(tf.tensordot(self.inference, tf.transpose(new_cond),
-                                                                          axes=1)), reduction_indices=[1]))
+        if self.settings.train_prob:
+            used_loss = tf.losses.softmax_cross_entropy(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1),
+                                                        self.wo_soft)
+
+            # used_loss = tf.losses.mean_squared_error(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1),
+            #                                          self.inference_learned)
 
         else:
-            # TODO no tf.assert for None
             # used hand-made P(s_k|m_j)
-            used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-                                                      tf.log(tf.tensordot(self.inference, tf.transpose(new_cond),
-                                                                          axes=1)), reduction_indices=[1]))
+            if new_cond is not None:
+                used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
+                                                          tf.log(tf.tensordot(self.inference, tf.transpose(new_cond),
+                                                                              axes=1)), reduction_indices=[1]))
+            else:
+                raise ValueError("new_cond is None, please insert value")
 
         # ---
-
         return used_loss
 
     def _old_loss(self, phoneme_batch, log_cn_pr):
