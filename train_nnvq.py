@@ -5,12 +5,14 @@ import os
 import time
 import numpy as np
 from kaldi_io import kaldi_io
-from NeuralNetHelper.MiscNN import MiscNN
+from NeuralNetHelper.MiscNNHelper import MiscNN
 from NeuralNetHelper.ModelHelper import Model
 from NeuralNetHelper import Settings
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
 from NeuralNetHelper.ManagementHelper import Management
 
+
+sess = tf.Session()
 
 # defining some operations
 global_step = tf.Variable(0, trainable=False)
@@ -20,28 +22,23 @@ nom_init = nom_var.assign(tf.fill([Settings.num_labels, Settings.codebook_size],
 den_init = den_var.assign(tf.fill([Settings.codebook_size], 0.0))
 
 # create iterator, select tfrecord-files for training, 3 feeding pipelines
-dict_lists = {
+dict_lists_tfrecords = {
     'train': [Settings.path_train + '/' + s for s in os.listdir(Settings.path_train)],
     'test': [Settings.path_test + '/' + s for s in os.listdir(Settings.path_test)],
-    'dev': [Settings.path_dev + '/' + s for s in os.listdir(Settings.path_dev)]
-}
-file_list_train = [Settings.path_train + '/' + s for s in os.listdir(Settings.path_train)]
-file_list_test = [Settings.path_test + '/' + s for s in os.listdir(Settings.path_test)]
-file_list_dev = [Settings.path_dev + '/' + s for s in os.listdir(Settings.path_dev)]
+    'dev': [Settings.path_dev + '/' + s for s in os.listdir(Settings.path_dev)]}
 
-feeder = DataFeeder(dict_lists, Settings)
+# define feeder
+feeder = DataFeeder(dict_lists_tfrecords, Settings, sess)
 
-train_feeder = DataFeeder(file_list_train, Settings.batch_size, Settings.dim_features, Settings.dim_labels)
-test_feeder = DataFeeder(file_list_test, Settings.batch_size, Settings.dim_features, Settings.dim_labels)
-dev_feeder = DataFeeder(file_list_dev, Settings.batch_size, Settings.dim_features, Settings.dim_labels)
-
-features_train, labels_train = train_feeder.iterator.get_next()
-features_test, labels_test = test_feeder.iterator.get_next()
-features_dev, labels_dev = dev_feeder.iterator.get_next()
+# create 3 pipelines for features
+features_train, labels_train = feeder.train.get_next()
+features_test, labels_test = feeder.test.get_next()
+features_dev, labels_dev = feeder.dev.get_next()
 
 labels = tf.placeholder(tf.float32, shape=[None, Settings.dim_labels], name='ph_labels')
 lr = tf.placeholder(tf.float32, shape=[], name='learning_rate')
-# features = tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features')
+features = tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features')
+train = tf.placeholder(tf.bool, name="is_train")
 #
 #
 lr_decay = tf.train.exponential_decay(Settings.learning_rate, global_step, 400, 0.90, staircase=True)
@@ -49,32 +46,13 @@ lr_decay = tf.train.exponential_decay(Settings.learning_rate, global_step, 400, 
 log_prob = None
 if Settings.vqing:
     log_prob = tf.placeholder(tf.float32, shape=[Settings.num_labels, Settings.codebook_size], name='prob')
-#
-# # -----------------------------
-#
-#
-# # create saver
-# # if Settings.restore:
-# #     print('Restore old model and train it further')
-# #     saver = tf.train.import_meta_graph(Settings.path_restore + '/saved_model-99.meta')
-# #     saver.restore(sess, tf.train.latest_checkpoint(Settings.path_restore))
-# #     graph = tf.get_default_graph()
-# # else:
-# #     print('Training new model')
-# #     saver = tf.train.Saver()
-#
-# # ----------------------------------
-#
+
 # define model
-model = Model(Settings)
+model = Model(train, features, Settings)
 misc = MiscNN(Settings.codebook_size, Settings.num_labels)
 # model_train = tf.estimator.Estimator(model_fn=model.inference)
 # y = model.inference(features)
 y = model.inference
-# y = tf.Print(y, [tf.reduce_sum(tf.cast(tf.is_nan(y), dtype=tf.int32))])
-#
-# y = tf.Print(y, [tf.shape(y)])
-# model_train.train(features)
 # vqing data of the whole dataset
 data_vqed = misc.vq_data(y, labels, nom_var, den_var)
 
@@ -86,14 +64,7 @@ if not Settings.restore:
     cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
     testing = misc.testing_stuff(y, cond_prob, labels)
 else:
-    pass
-    # cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
-    # cond_prob = [v for v in tf.trainable_variables() if v.name == "mapping_layer/kernel:0"][0]
-    # [print(v.name) for v in tf.trainable_variables()]
-    # cond_prob = tf.get_default_graph().get_tensor_by_name('mapping_layer/kernel:0')
-    # sess.run(cond_prob)
-    # cond_prob = tf.transpose(cond_prob)
-    # pass
+    cond_prob = misc.conditioned_probability(y, labels, discrete=Settings.sampling_discrete)
 
 # loss
 # regularizer = tf.contrib.layers.l1_regularizer(scale=1e-3)
@@ -135,7 +106,7 @@ with tf.control_dependencies(update_ops):
 # new_graph = tf.Graph()
 # init = tf.global_variables_initializer()
 # # init_local = tf.local_variables_initializer()
-sess = tf.Session()
+
 # # sess = tf_debug.TensorBoardDebugWrapperSession(sess, "tueimmk-apo6:7000")
 # sess.run(init)
 
@@ -343,9 +314,10 @@ if not Settings.restore:
 else:
     for i in range(Settings.epoch_size):
         print("Epoch " + str(i))
-        sess.run(train_feeder.iterator.initializer)
-        sess.run(test_feeder.iterator.initializer)
-        sess.run(dev_feeder.iterator.initializer)
+        feeder.init_all()
+        # sess.run(train_feeder.iterator.initializer)
+        # sess.run(test_feeder.iterator.initializer)
+        # sess.run(dev_feeder.iterator.initializer)
 
         print('Doing single epoch...')
         while True:

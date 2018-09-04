@@ -6,7 +6,7 @@ class Model(object):
     """
     Creates a model object
     """
-    def __init__(self, settings):
+    def __init__(self, ph_train, ph_features, settings):
         """
         Init the Model
 
@@ -16,8 +16,10 @@ class Model(object):
         self.settings = settings
 
         # input placeholders
-        self.train = tf.placeholder(tf.bool, name="is_train")
-        self.features = tf.placeholder(tf.float32, shape=[None, self.settings.dim_features], name='ph_features')
+        # self.train = tf.placeholder(tf.bool, name="is_train")
+        # self.features = tf.placeholder(tf.float32, shape=[None, self.settings.dim_features], name='ph_features')
+        self.train = ph_train
+        self.features = ph_features
 
         # output of model
         self.inference = []
@@ -87,30 +89,4 @@ class Model(object):
 
         # ---
         return used_loss
-
-    def _old_loss(self, phoneme_batch, log_cn_pr):
-        """
-        deprecated!
-
-        :param phoneme_batch:
-        :param log_cn_pr:
-        :return:
-        """
-        output_nn = self.inference
-        phoneme_batch = tf.cast(phoneme_batch, dtype=tf.int32)  # cast to int and put them in [[alignments]]
-        batch_size = tf.cast(tf.shape(phoneme_batch)[0], dtype=tf.float32)
-
-        # gather all data --> s~(t) for eq 5.50
-        gather_data = tf.gather_nd(log_cn_pr, phoneme_batch)
-
-        # s2 (summand 2)
-        labels_loss = tf.multiply(gather_data, output_nn)
-        labels_loss = tf.expand_dims(tf.reduce_sum(labels_loss, axis=1), 1)
-        # s2 = tf.tile(s2, [1, tf.shape(output_soft)[1]])
-
-        labels_loss *= output_nn
-
-        s2 = -self.scale / batch_size * tf.losses.sigmoid_cross_entropy(labels_loss, output_nn * gather_data)
-
-        return s2
 

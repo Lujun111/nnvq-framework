@@ -6,15 +6,15 @@ class MiscNN(object):
     MiscNN object contains auxiliary functions which are needed for
     logging and to compute functions in the graph
     """
-    def __init__(self, codebook_size, num_labels):
+    def __init__(self, settings):
         """
         Init MiscNN
 
         :param codebook_size: size of the codebook
         :param num_labels:    number of labels (e.g. for monophone states=127)
         """
-        self.cb_size = codebook_size
-        self.num_labels = num_labels
+        self.cb_size = settings.codebook_size
+        self.num_labels = settings.num_labels
 
     def calculate_mi_tf(self, y_nn, labels):
         """
@@ -27,6 +27,8 @@ class MiscNN(object):
         """
         alpha = 1.0
         beta = -1.0
+
+        labels = tf.cast(labels, dtype=tf.int32)
 
         # take the argmax of y_nn to get the class label determined by the
         # neural network
