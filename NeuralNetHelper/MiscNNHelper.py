@@ -93,7 +93,7 @@ class MiscNN(object):
         # adding to graph for visualisation in tensorboard
         tf.identity(pwtmp, 'P_w')
         tf.identity(pytmp, 'P_y')
-        tf.identity(pw_y_tmp, 'P_w_y_')
+        tf.identity(pw_y_tmp, 'P_w_y')
 
         return pwtmp, pytmp, pw_y_tmp
 
@@ -205,6 +205,10 @@ class MiscNN(object):
             raise NotImplementedError("Not implemented!")
 
         return nominator, denominator
+
+    @staticmethod
+    def init_variable(variable):
+        variable.assign(tf.fill([tf.shape(variable)], 0.0))
 
     def testing_stuff(self, output_nn, cond_prob, phonemes):
         """

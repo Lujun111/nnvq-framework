@@ -2,13 +2,13 @@ import tensorflow as tf
 
 
 class Loss(object):
-    def __init__(self, logits, labels):
+    def __init__(self, logits, labels, cond_prob=None):
         self._logits = logits
         self._labels = labels
+        self.loss = self._get_loss(cond_prob=cond_prob)
 
-    def loss(self, cond_prob=None):
+    def _get_loss(self, cond_prob=None):
         self._labels = tf.cast(self._labels, dtype=tf.int32)  # cast to int and put them in [[alignments]]
-
         # ----
         # train output layer to create P(s_k|m_j)
         if cond_prob is None:
