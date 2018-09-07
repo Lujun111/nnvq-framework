@@ -207,8 +207,8 @@ class MiscNN(object):
         return nominator, denominator
 
     @staticmethod
-    def init_variable(variable):
-        variable.assign(tf.fill([tf.shape(variable)], 0.0))
+    def reset_variable(variable):
+        return variable.assign(tf.fill(tf.shape(variable), 0.0))
 
     def testing_stuff(self, output_nn, cond_prob, phonemes):
         """

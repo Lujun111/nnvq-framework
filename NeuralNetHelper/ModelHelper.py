@@ -67,27 +67,3 @@ class Model(object):
         # ------------------------------------------------------------------
         # end of definition of network
 
-    # def loss(self, phoneme_batch, new_cond=None):
-    #     phoneme_batch = tf.cast(phoneme_batch, dtype=tf.int32)  # cast to int and put them in [[alignments]]
-    #
-    #     # ----
-    #     # train output layer to create P(s_k|m_j)
-    #     if self.settings.train_prob:
-    #         used_loss = tf.losses.softmax_cross_entropy(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1),
-    #                                                     self.wo_soft)
-    #
-    #         # used_loss = tf.losses.mean_squared_error(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1),
-    #         #                                          self.inference_learned)
-    #
-    #     else:
-    #         # used hand-made P(s_k|m_j)
-    #         if new_cond is not None:
-    #             used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(phoneme_batch), 127, axis=1) *
-    #                                                       tf.log(tf.tensordot(self.inference, tf.transpose(new_cond),
-    #                                                                           axes=1)), reduction_indices=[1]))
-    #         else:
-    #             raise ValueError("new_cond is None, please insert value")
-    #
-    #     # ---
-    #     return used_loss
-

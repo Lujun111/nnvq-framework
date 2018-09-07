@@ -12,7 +12,7 @@ from KaldiHelper.MiscHelper import Misc
 
 # TODO no path and file checking so far
 # TODO pytorch inference
-class TrainedModel(object):
+class InferenceModel(object):
     """
         TrainedModel for performing the inference after training
     """
@@ -41,6 +41,7 @@ class TrainedModel(object):
         self._get_checkpoint_data(meta_file)
         self._create_session()
         self._create_graph()
+        # self.init_object(session)
         self._set_global_stats(stats_file)
         # setting transform matrix
         if self.transform:
@@ -124,15 +125,16 @@ class TrainedModel(object):
         #     print("Variable: ", k)
         #     print("Shape: ", v.shape)
         #     print(v)
+        # exit()
 
         # TODO check for None; normalize data (YES/NO)
         # normalize data
         np_mat = self._normalize_data(np_mat)
-
         # inference
         # logits = self._graph.get_tensor_by_name('new_output/MatMul:0')
         # print(logits)
-        output = self._session.run('new_nn_output:0', feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        output = self._session.run("nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        # print(output)
         # print(np.max(output, axis=1))
         # transform data with "continuous trick"
         # here same theory:
@@ -140,11 +142,11 @@ class TrainedModel(object):
         # P(o_k) = sum_j [ P(m_j) * P(s_k|m_j) ]
         # TODO what to do if we have no transform
         if self.transform:
-            pass
-            # if self.cond_prob is not None:
-            #     output = np.dot(output, self.cond_prob)
-            # else:
-            #     raise ValueError("cond_prob is None, please check!")
+            if self.cond_prob is not None:
+                # print("Transform output to 127 pdf...")
+                output = np.dot(output, self.cond_prob)
+            else:
+                raise ValueError("cond_prob is None, please check!")
         # if we don't do the "continuous trick" we output discrete labels
         # therefore, we use argmax of the output
         else:
@@ -168,8 +170,11 @@ class TrainedModel(object):
         Create graph and load model (file comes out of the training)
         """
         saver = tf.train.import_meta_graph(self._checkpoint_folder + '/' + self._meta_file)
+        # list_restore = [v for v in tf.trainable_variables()]
+        # print(list_restore)
+        # self._session.run(tf.global_variables_initializer())
         saver.restore(self._session, tf.train.latest_checkpoint(self._checkpoint_folder))
-        self._graph = tf.get_default_graph()
+        # self._graph = tf.get_default_graph()
 
     def _create_list(self, folder_name):
         """
@@ -247,6 +252,9 @@ class TrainedModel(object):
         _, self._checkpoint_folder, self._meta_file = str.split(checkpoint, '/')
         self._checkpoint_folder = '../' + self._checkpoint_folder
 
+    def init_object(self, session):
+        self._session = tf.Session()
+        self._session.run(tf.global_variables_initializer())
 
 if __name__ == "__main__":
     # set transform_prob=False if you don't want to get a continuous output (default is True)
@@ -256,7 +264,7 @@ if __name__ == "__main__":
 
     if discrete:
         # discrete model
-        model_discrete = TrainedModel('../model_checkpoint/saved_model-99.meta', '../stats_20k.mat',
+        model_discrete = InferenceModel('../model_checkpoint/saved_model-99.meta', '../stats_20k.mat',
                                       '../p_s_m.mat', log_output=False, transform_prob=False)
 
         model_discrete.do_inference(20, '/features/train_20k/feats', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
@@ -265,7 +273,7 @@ if __name__ == "__main__":
                                                 'exp/test_400_0/vq_test')
     else:
         # continuous model
-        model_continuous = TrainedModel('../model_checkpoint/saved_model-8.meta', '../stats_20k.mat',
+        model_continuous = InferenceModel('../model_checkpoint/saved_model-99.meta', '../stats_20k.mat',
                                         '../p_s_m.mat',)
         # model_continuous.do_inference(20, 'features/train_20k/feats', '../tmp/tmp_testing')
         model_continuous.do_inference(30, 'test', '../tmp/tmp_testing')

@@ -11,6 +11,7 @@ from NeuralNetHelper import Settings
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
 from NeuralNetHelper.LossHelper import Loss
 from NeuralNetHelper.OptimizerHelper import Optimizer
+from KaldiHelper.InferenceHelper import InferenceModel
 
 
 class Management(object):
@@ -96,11 +97,11 @@ class Management(object):
         else:
             print('Cannot find a checkpoint with a model, starting to train a new model...')
 
-    def _init_vars(self):
-        if self._session is not None:
-            self._session = tf.Session()
-        else:
-            raise BaseException('Session is None, init session!')
+    # def _init_vars(self):
+    #     if self._session is not None:
+    #         self._session = tf.Session()
+    #     else:
+    #         raise BaseException('Session is None, init session!')
 
     def _get_job(self, job_name):
         assert type(job_name) is str
@@ -216,7 +217,6 @@ class Management(object):
         """
         Train a single epoch
         """
-        # set something to test
 
         self._feeder.init_train()
 
@@ -289,3 +289,40 @@ class Management(object):
                     self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
                     self._current_mi = mi_vald[0]
                 break
+
+    def create_p_s_m(self):
+
+        self._feeder.init_train()
+
+        # set model.train to False to avoid training
+        # model.train = False
+        while True:
+            try:
+                feat, labs = self._session.run([self._input_train[0], self._input_train[1]])
+
+                nom_vq, den_vq = self._session.run(self._data_vqed, feed_dict={self._ph_train: False, self._ph_features: feat,
+                                                                               self._ph_labels: labs})
+
+            except tf.errors.OutOfRangeError:
+                nom_vq += Settings.delta
+                den_vq += Settings.num_labels * Settings.delta
+                prob = nom_vq / den_vq
+
+                # saving matrix with kaldi_io
+                save_dict = {'p_s_m': prob}
+                print('Saving P(s_k|m_j)')
+                with open('p_s_m.mat', 'wb') as f:
+                    for key, mat in list(save_dict.items()):
+                        kaldi_io.write_mat(f, mat, key=key)
+
+                # reset den and nom
+                self._session.run([self._misc.reset_variable(self._nominator),
+                                   self._misc.reset_variable(self._denominator)])
+
+                break
+
+    def do_inference(self, stats_file='stats_20k.mat', cond_prob_file='p_s_m.mat', transform_prob=True, log_output=True):
+        inference = InferenceModel(self._session, stats_file,
+                                   cond_prob_file, transform_prob=transform_prob, log_output=log_output)
+        # model_continuous.do_inference(20, 'features/train_20k/feats', '../tmp/tmp_testing')
+        inference.do_inference(30, 'test', 'tmp/tmp_testing')
