@@ -57,12 +57,12 @@ class Model(object):
             # output without softmax
             self.logits = out_scaled
             # output with soft, be aware use a name 'nn_output' for the output node!
-            self.inference = tf.nn.softmax(out_scaled, name='nn_output')
+            self.inference = tf.nn.softmax(self.logits, name='nn_output')
 
         # learn the mapping
-        with tf.variable_scope('added_network'):
-            self.logits_new = tf.layers.dense(self.inference, 127, activation=None)
-            self.inference_learned = tf.nn.softmax(self.logits_new, name='new_nn_output')
+        # with tf.variable_scope('added_network'):
+        #     self.logits_new = tf.layers.dense(self.inference, 127, activation=None)
+        #     self.inference_learned = tf.nn.softmax(self.logits_new, name='new_nn_output')
 
         # ------------------------------------------------------------------
         # end of definition of network

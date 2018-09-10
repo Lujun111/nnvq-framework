@@ -128,9 +128,9 @@ class Management(object):
         self._model = Model(self._ph_train, self._ph_features, Settings)
 
     def _init_saver(self):
-        list_restore = [v for v in tf.trainable_variables()]
+        # list_restore = [v for v in tf.trainable_variables()]
         # print(list_restore[:6])
-        self._saver = tf.train.Saver(list_restore)
+        self._saver = tf.train.Saver()
 
     def _init_misc(self):
         self._misc = MiscNN(Settings)
@@ -187,7 +187,7 @@ class Management(object):
         else:
             self._loss = Loss(self._model.inference, self._ph_labels, cond_prob=self._conditioned_probability)
 
-        self._optimizer = Optimizer(Settings, self._loss.loss, self._global_step, var_list=self._var_list_training('base'))
+        self._optimizer = Optimizer(Settings, self._loss.loss, self._global_step, var_list=self._var_list_training())
 
         tf.summary.scalar('train/loss', self._loss.loss)
         tf.summary.scalar('misc/conditioned_entropy', self._conditioned_entropy)
@@ -199,9 +199,12 @@ class Management(object):
         self._train_writer = tf.summary.FileWriter(Settings.path_tensorboard + '/training_' + time_string, self._graph)
 
     @staticmethod
-    def _var_list_training(number='BASE'):
+    def _var_list_training(number=None):
 
-        if number.upper() == 'BASE':
+        if number is None:
+            print('No identify string, train all parameters')
+            return None
+        elif number.upper() == 'BASE':
             print('Optimizing the base parameters')
             return [v for v in tf.trainable_variables('base_network')]
         elif number.upper() == 'ADDED':
@@ -274,7 +277,7 @@ class Management(object):
                 labels_all = np.concatenate(labels_all)
 
                 # mi_test = sum_mi / self._count_mi
-                mi_vald = self._session.run(self._mutual_information, feed_dict={"is_train:0": False, self._ph_features:
+                mi_vald = self._session.run(self._mutual_information, feed_dict={self._ph_train: False, self._ph_features:
                     features_all, self._ph_labels: labels_all})
                 print(mi_vald)
                 summary_tmp = tf.Summary()

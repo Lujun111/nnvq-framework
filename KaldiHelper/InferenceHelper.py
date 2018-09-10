@@ -38,9 +38,9 @@ class InferenceModel(object):
         self._checkpoint_folder = None
 
         # execute some init methods
-        self._get_checkpoint_data(meta_file)
+        # self._get_checkpoint_data(meta_file)
         self._create_session()
-        self._create_graph()
+        self._create_graph(meta_file)
         # self.init_object(session)
         self._set_global_stats(stats_file)
         # setting transform matrix
@@ -133,7 +133,7 @@ class InferenceModel(object):
         # inference
         # logits = self._graph.get_tensor_by_name('new_output/MatMul:0')
         # print(logits)
-        output = self._session.run("nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        output = self._session.run("base_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
         # print(output)
         # print(np.max(output, axis=1))
         # transform data with "continuous trick"
@@ -164,17 +164,19 @@ class InferenceModel(object):
         Create interactive session to save space on gpu
         """
         self._session = tf.InteractiveSession()
+        self._session.run(tf.global_variables_initializer())
 
-    def _create_graph(self):
+    def _create_graph(self, meta_file):
         """
         Create graph and load model (file comes out of the training)
         """
-        saver = tf.train.import_meta_graph(self._checkpoint_folder + '/' + self._meta_file)
+        saver = tf.train.import_meta_graph(meta_file)
+        print(saver)
         # list_restore = [v for v in tf.trainable_variables()]
         # print(list_restore)
         # self._session.run(tf.global_variables_initializer())
-        saver.restore(self._session, tf.train.latest_checkpoint(self._checkpoint_folder))
-        # self._graph = tf.get_default_graph()
+        saver.restore(self._session, tf.train.latest_checkpoint(os.path.dirname(meta_file)))
+        self._graph = tf.get_default_graph()
 
     def _create_list(self, folder_name):
         """
@@ -273,7 +275,7 @@ if __name__ == "__main__":
                                                 'exp/test_400_0/vq_test')
     else:
         # continuous model
-        model_continuous = InferenceModel('../model_checkpoint/saved_model-99.meta', '../stats_20k.mat',
+        model_continuous = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',
                                         '../p_s_m.mat',)
         # model_continuous.do_inference(20, 'features/train_20k/feats', '../tmp/tmp_testing')
         model_continuous.do_inference(30, 'test', '../tmp/tmp_testing')
