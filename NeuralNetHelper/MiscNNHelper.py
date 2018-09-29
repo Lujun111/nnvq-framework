@@ -1,4 +1,6 @@
 import tensorflow as tf
+from kaldi_io import kaldi_io
+import numpy as np
 
 
 class MiscNN(object):
@@ -251,5 +253,23 @@ class MiscNN(object):
 
         return tmp
 
+    def set_probabilities(self, file):
+        # TODO hard coded for getting class counts --> make sure that file class.counts exists
+        # TODO and contains the key class_counts
+        """
+        Set P(s_k|m_j) and prior P(s_k) from training
+
+        :param file: path to P(s_k|m_j) file (kaldi-format, must contain the key 'p_s_m')
+        """
+        # Set P(s_k|m_j)
+        for key, mat in kaldi_io.read_mat_ark(file):
+            if key == 'p_s_m':
+                print('Setting P(s_k|m_j)')
+                return tf.convert_to_tensor(np.transpose(mat))  # we transpose for later dot product
+                # print(np.sum(self.cond_prob, axis=1))
+                # print(np.shape(np.sum(self.cond_prob, axis=1)))
+            else:
+                print('No probability found')
+                return None
 
 

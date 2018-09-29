@@ -8,6 +8,7 @@ import numpy as np
 from kaldi_io import kaldi_io
 from KaldiHelper.IteratorHelper import DataIterator
 from KaldiHelper.MiscHelper import Misc
+import matplotlib.pyplot as plt
 
 
 # TODO no path and file checking so far
@@ -33,9 +34,12 @@ class InferenceModel(object):
         self.cond_prob = None
         self.prior = None
         self._session = None
-        self._graph = None
+        self._session1 = None
+        self._graph = tf.Graph()
+        self._graph1 = tf.Graph()
         self._meta_file = None
         self._checkpoint_folder = None
+        self._dev_alignments = {}
 
         # execute some init methods
         # self._get_checkpoint_data(meta_file)
@@ -46,7 +50,7 @@ class InferenceModel(object):
         # setting transform matrix
         if self.transform:
             self._set_probabilities(cond_prob_file)
-
+        self._load_dev_alignemnts()
         # hint to produce a discrete output:
         # set transform_prob=False and log_output=False, then you get discrete labels out
         # of the inference model
@@ -69,6 +73,7 @@ class InferenceModel(object):
         features_all = []
         phoneme_all = []
         inferenced_data = {}  # storing the inferenced data
+        check_data = {}
 
         while True:
             try:
@@ -77,6 +82,8 @@ class InferenceModel(object):
                 # iterate through data
                 for key, mat in kaldi_io.read_mat_ark(data_path):
                     inferenced_data[key] = self._do_single_inference(mat[:, :39])  # do inference for one batch
+                    tmp = self._do_single_inference(mat[:, :39])
+                    # check_data[key] = [np.argmax(tmp[0], axis=1), np.argmax(tmp[1], axis=1), self._dev_alignments[key]]
                     if np.shape(mat)[1] > 39:   # get statistics for mi (only if we input data + labels), for debugging
                         phoneme_all.append(mat[:, 39])
                     # add for debugging, see below
@@ -92,7 +99,41 @@ class InferenceModel(object):
                 inferenced_data = {}  # reset dict
 
             except StopIteration:
-                # hardcoded for mi, for debugging
+                # debugging
+                # gather_right = np.zeros(127)
+                # gather_right.fill(1e-5)
+                # gather_wrong = np.zeros(127)
+                # gather_wrong.fill(1e-5)
+                # gather_vq = np.zeros(127)
+                # gather_vq.fill(1e-5)
+                #
+                # for key, entry in check_data.items():
+                #     tmp_van = entry[0] == entry[2]  # right pred of vanilla
+                #     van_right = [t for t, x in enumerate(tmp_van) if x]
+                #     van_wrong = [t for t, x in enumerate(~tmp_van) if x]
+                #
+                #     list_vq = ~(entry[0] == entry[2]) == (entry[1] == entry[2])
+                #     ind_vq = [t for t, x in enumerate(list_vq) if x]
+                #
+                #     print(len(van_right))
+                #     print(len(van_wrong))
+                #     print(len(van_right) + len(van_wrong))
+                #     # print(entry[2][van_wrong])
+                #     gather_right[entry[2][van_right]] += 1.0
+                #     gather_wrong[entry[2][van_wrong]] += 1.0
+                #     gather_vq[entry[2][ind_vq]] += 1.0
+                #     # print(len(van_right) + len(van_wrong))
+                #     # print(len(entry[2]))
+                #     print(sum(list_vq) / len(entry[2]))
+                #
+                # plt.subplot(3, 1, 1)
+                # plt.bar(range(0, 127), gather_right)
+                # plt.subplot(3, 1, 2)
+                # plt.bar(range(0, 127), gather_wrong)
+                # plt.subplot(3, 1, 3)
+                # plt.bar(range(0, 127), gather_vq)
+                # plt.show()
+                # print(check_data[0] == check_data[1])
                 if False:
                     misc = Misc()
                     features_all = np.concatenate(features_all)
@@ -131,10 +172,19 @@ class InferenceModel(object):
         # normalize data
         np_mat = self._normalize_data(np_mat)
         # inference
-        # logits = self._graph.get_tensor_by_name('new_output/MatMul:0')
+        # with self._graph.as_default() as g:
+        #     logits = g.get_tensor_by_name("vanilla_network/nn_output:0")
+        #     sess = tf.InteractiveSession()
+        #     sess.run(tf.global_variables_initializer())
+        #     output = sess.run(logits,
+        #                            feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        logits = self._graph.get_tensor_by_name("combination_network/nn_output:0")
         # print(logits)
-        output = self._session.run("base_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-        # print(output)
+        output = self._session.run(logits, feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        output += 1e-30
+        # output_van = self._session.run("vanilla_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        # output_vq = self._session1.run("base_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        # print(np.argmax(output, axis=1))
         # print(np.max(output, axis=1))
         # transform data with "continuous trick"
         # here same theory:
@@ -144,39 +194,80 @@ class InferenceModel(object):
         if self.transform:
             if self.cond_prob is not None:
                 # print("Transform output to 127 pdf...")
-                output = np.dot(output, self.cond_prob)
+                # output_vq = np.dot(output_vq, self.cond_prob)
+                pass
             else:
                 raise ValueError("cond_prob is None, please check!")
         # if we don't do the "continuous trick" we output discrete labels
         # therefore, we use argmax of the output
         else:
-            output = np.argmax(output, axis=1)
-            output = output.astype(np.float64, copy=False)
+            output_vq = np.argmax(output, axis=1)
+            output_vq = output_vq.astype(np.float64, copy=False)
 
-        # flag for setting log-output or normal output
+        # output = self.posterior_combination(np.log(output_van), np.log(output_vq), 0.25)
+        # output -= np.log(self.prior)
+
+        # # flag for setting log-output or normal output
         if self.log_ouput:
+            # print(np.min(output))
             output /= self.prior    # divide through prior to get pseudo-likelihood
             output = np.log(output)
         return output
+
+    @staticmethod
+    def posterior_combination(log_posterior_1, log_posterior_2, alpha):
+        """
+        Doing the posterior combination with log posteriors
+
+        :param log_posterior_1:
+        :param log_posterior_2:
+        :param alpha:
+        :return:
+        """
+        return alpha * log_posterior_1 + (1 - alpha) * log_posterior_2
 
     def _create_session(self):
         """
         Create interactive session to save space on gpu
         """
-        self._session = tf.InteractiveSession()
-        self._session.run(tf.global_variables_initializer())
+        self._session = tf.Session(graph=self._graph)
+        # self._session.run(tf.global_variables_initializer())
+        self._session1 = tf.Session(graph=self._graph1)
+        # self._session1.run(tf.global_variables_initializer())
 
     def _create_graph(self, meta_file):
         """
         Create graph and load model (file comes out of the training)
         """
-        saver = tf.train.import_meta_graph(meta_file)
-        print(saver)
+        # print(os.path.dirname(meta_file))
+        path = os.path.dirname(meta_file)
+        # path_van = os.path.dirname(meta_file) + '/van_graph'
+        # path_vq = os.path.dirname(meta_file) + '/vq_graph'
+
+        # saver = tf.train.import_meta_graph(meta_file)
+        # saver.restore(self._session, tf.train.latest_checkpoint(path_van))
+        # self._graph = tf.get_default_graph()
+        with self._graph.as_default():
+            saver = tf.train.import_meta_graph(path + '/saved_model.meta')
+            saver.restore(self._session, tf.train.latest_checkpoint(path))
+        #  with self._graph.as_default():
+        #     saver = tf.train.import_meta_graph(path_van + '/saved_model.meta')
+        #     saver.restore(self._session, tf.train.latest_checkpoint(path_van))
+        # # tf.reset_default_graph()
+        # # self._create_session()
+        # #
+        # # self._graph1 = tf.get_default_graph()
+        # with self._graph1.as_default():
+        #     saver = tf.train.import_meta_graph(path_vq + '/saved_model.meta')
+        #     saver.restore(self._session1, tf.train.latest_checkpoint(path_vq))
+        # tf.reset_default_graph()
+
+
         # list_restore = [v for v in tf.trainable_variables()]
         # print(list_restore)
         # self._session.run(tf.global_variables_initializer())
-        saver.restore(self._session, tf.train.latest_checkpoint(os.path.dirname(meta_file)))
-        self._graph = tf.get_default_graph()
+        # saver.restore(self._session, tf.train.latest_checkpoint(path_van))
+        # saver1.restore(self._session, tf.train.latest_checkpoint(path_vq))
 
     def _create_list(self, folder_name):
         """
@@ -257,6 +348,12 @@ class InferenceModel(object):
     def init_object(self, session):
         self._session = tf.Session()
         self._session.run(tf.global_variables_initializer())
+
+    def _load_dev_alignemnts(self):
+        for key, mat in kaldi_io.read_ali_ark('../tmp/state_labels/all_ali_dev'):
+            self._dev_alignments[key] = mat
+        print('Finished loading dev alignments')
+
 
 if __name__ == "__main__":
     # set transform_prob=False if you don't want to get a continuous output (default is True)
