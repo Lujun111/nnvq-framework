@@ -6,12 +6,9 @@ import os
 import time
 import numpy as np
 from kaldi_io import kaldi_io
-from NeuralNetHelper.MiscNNHelper import MiscNN
-from NeuralNetHelper.ModelHelper import Model
 from NeuralNetHelper import Settings
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
-from NeuralNetHelper.LossHelper import Loss
-from NeuralNetHelper.OptimizerHelper import Optimizer
+from NeuralNetHelper.SummaryHelper import Summary
 from KaldiHelper.InferenceHelper import InferenceModel
 
 
@@ -30,13 +27,14 @@ class Train(object):
         self._placeholders = placeholders
         self._variables = variables
         self._saver = tf.train.Saver()
+        self._summary = Summary(settings)
 
         self._feeder = data_feeder
         self._input_train = data_feeder.train.get_next()
         self._input_test = data_feeder.test.get_next()
         self._input_dev = data_feeder.dev.get_next()
 
-        self._current_mi = -100.0
+        self._current_value = -100.0
 
         self._create_train_dict()
 
@@ -220,38 +218,8 @@ class Train(object):
                                                            self._placeholders['ph_last_layer']: True})
 
                 if return_dict['count'] % 100:
-                    summary_tmp = tf.Summary()
-                    if Settings.identifier == 'combination':
-                        summary_tmp.value.add(tag='train/mutual_information', simple_value=return_dict['mi'][0])
-                        summary_tmp.value.add(tag='train/H(w)', simple_value=return_dict['mi'][1])
-                        summary_tmp.value.add(tag='train/H(y)', simple_value=return_dict['mi'][2])
-                        summary_tmp.value.add(tag='train/H(w|y)', simple_value=return_dict['mi'][3])
-                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
-                        summary_tmp.value.add(tag='train/acc_vanilla', simple_value=return_dict['accuracy_vanilla'][0])
-                        summary_tmp.value.add(tag='train/accuracy',
-                                              simple_value=return_dict['accuracy_combination'][0])
-                    elif Settings.identifier == 'nnvq':
-                        summary_tmp.value.add(tag='train/mutual_information', simple_value=return_dict['mi'][0])
-                        summary_tmp.value.add(tag='train/H(w)', simple_value=return_dict['mi'][1])
-                        summary_tmp.value.add(tag='train/H(y)', simple_value=return_dict['mi'][2])
-                        summary_tmp.value.add(tag='train/H(w|y)', simple_value=return_dict['mi'][3])
-                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
-                    elif Settings.identifier == 'vanilla':
-                        summary_tmp.value.add(tag='train/accuracy', simple_value=return_dict['accuracy'][0])
-                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
-                    elif Settings.identifier == 'restore':
-                        summary_tmp.value.add(tag='train/accuracy', simple_value=return_dict['accuracy_combination'][0])
-                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
-                    elif Settings.identifier == 'front':
-                        summary_tmp.value.add(tag='train/mutual_information', simple_value=return_dict['mi'][0])
-                        summary_tmp.value.add(tag='train/H(w)', simple_value=return_dict['mi'][1])
-                        summary_tmp.value.add(tag='train/H(y)', simple_value=return_dict['mi'][2])
-                        summary_tmp.value.add(tag='train/H(w|y)', simple_value=return_dict['mi'][3])
-                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
-                        summary_tmp.value.add(tag='train/acc_vanilla', simple_value=return_dict['accuracy_vanilla'][0])
-                    summary_tmp.value.add(tag='train/loss', simple_value=return_dict['loss'])
                     # summary_tmp.value.add(tag='misc/alpha', simple_value=return_dict['alpha'])
-                    self._train_writer.add_summary(summary_tmp, return_dict['count'])
+                    self._train_writer.add_summary(self._summary.train_logs(return_dict), return_dict['count'])
                     self._train_writer.flush()
 
             except tf.errors.OutOfRangeError:
@@ -312,26 +280,26 @@ class Train(object):
                                                            self._placeholders['ph_lr']: Settings.learning_rate_pre,
                                                            self._placeholders['ph_last_layer']: False})
 
-                summary_tmp = tf.Summary()
-                if Settings.identifier == 'combination':
-                    summary_tmp.value.add(tag='validation/mutual_information', simple_value=return_dict['mi'][0])
-                    summary_tmp.value.add(tag='validation/accuracy', simple_value=return_dict['accuracy_combination'][0])
-                elif Settings.identifier == 'vanilla':
-                    summary_tmp.value.add(tag='validation/accuracy', simple_value=return_dict['accuracy'][0])
-                elif Settings.identifier == 'nnvq':
-                    summary_tmp.value.add(tag='validation/mutual_information', simple_value=return_dict['mi'][0])
-                elif Settings.identifier == 'restore':
-                    summary_tmp.value.add(tag='validation/accuracy', simple_value=return_dict['accuracy_combination'][0])
-
-                self._train_writer.add_summary(summary_tmp, return_dict['count'])
+                self._train_writer.add_summary(self._summary.validation_logs(return_dict), return_dict['count'])
                 self._train_writer.flush()
 
-                # TODO save current mi
-                if return_dict['accuracy'][0] > self._current_mi:
-                    print('Saving better model...')
-                    self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
-                    self._current_mi = return_dict['accuracy'][0]
-                # return_dict = {}
+                # save depending on model
+                # TODO solve it better @Tobias
+                if self._settings == 'vanilla':
+                    if return_dict['accuracy'][0] > self._current_value:
+                        print('Saving better model...')
+                        self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
+                        self._current_value = return_dict['accuracy'][0]
+                elif self._settings == 'combination':
+                    if return_dict['accuracy_combination'][0] > self._current_value:
+                        print('Saving better model...')
+                        self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
+                        self._current_value = return_dict['accuracy_combination'][0]
+                elif self._settings == 'nnvq':
+                    if return_dict['mi'][0] > self._current_value:
+                        print('Saving better model...')
+                        self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
+                        self._current_value = return_dict['mi'][0]
                 break
 
     def create_p_s_m(self):
@@ -344,7 +312,7 @@ class Train(object):
             try:
                 feat, labs = self._session.run([self._input_train[0], self._input_train[1]])
 
-                nom_vq, den_vq = self._session.run(self._train_dict, feed_dict={self._placeholders['ph_train']: False,
+                nom_vq, den_vq = self._session.run(self._train_dict['data_vq'], feed_dict={self._placeholders['ph_train']: False,
                                                                                 self._placeholders['ph_features']: feat,
                                                                                 self._placeholders['ph_labels']: labs})
 
