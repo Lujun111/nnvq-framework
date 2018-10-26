@@ -19,7 +19,7 @@ num_labels = 127
 delta = 0.01    # delta for P(s_k|m_j)
 codebook_size = 400
 batch_size = 15000
-epoch_size = 100
+epoch_size = 101
 dim_features = 39
 dim_labels = 1
 
@@ -36,7 +36,7 @@ vqing = False
 sampling_discrete = False
 # create P(s_k|m_j) from training data
 create_conditioned_prob = False
-identifier = 'combination'
+identifier = ['front', 'restore']
 
 # Inference
 inference = False

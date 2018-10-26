@@ -8,6 +8,7 @@ import numpy as np
 from kaldi_io import kaldi_io
 from KaldiHelper.IteratorHelper import DataIterator
 from KaldiHelper.MiscHelper import Misc
+from NeuralNetHelper.MiscNNHelper import MiscNN
 import matplotlib.pyplot as plt
 
 
@@ -44,7 +45,7 @@ class InferenceModel(object):
         # execute some init methods
         # self._get_checkpoint_data(meta_file)
         self._create_session()
-        self._create_graph(meta_file)
+        self._create_graph(meta_file, identifier=None)
         # self.init_object(session)
         self._set_global_stats(stats_file)
         # setting transform matrix
@@ -70,10 +71,11 @@ class InferenceModel(object):
         # number iterator for counting, necessary for writing the matrices later
         iterator = iter([i for i in range(1, dataset.get_size() + 1)])
 
-        features_all = []
-        phoneme_all = []
+        features_all = {}
+        phoneme_all = {}
         inferenced_data = {}  # storing the inferenced data
         check_data = {}
+        output_all = {}
 
         while True:
             try:
@@ -83,11 +85,12 @@ class InferenceModel(object):
                 for key, mat in kaldi_io.read_mat_ark(data_path):
                     inferenced_data[key] = self._do_single_inference(mat[:, :39])  # do inference for one batch
                     tmp = self._do_single_inference(mat[:, :39])
-                    # check_data[key] = [np.argmax(tmp[0], axis=1), np.argmax(tmp[1], axis=1), self._dev_alignments[key]]
+                    # check_data[key] = [np.argmax(tmp[0], axis=1), np.argmax(tmp[1], axis=1),
+                    #                    np.argmax(tmp[2], axis=1), self._dev_alignments[key]]
                     if np.shape(mat)[1] > 39:   # get statistics for mi (only if we input data + labels), for debugging
-                        phoneme_all.append(mat[:, 39])
+                        phoneme_all[key] = mat[:, 39]
                     # add for debugging, see below
-                    features_all.append(self._normalize_data(mat[:, :39]))
+                    output_all[key] = tmp
 
                 # write posteriors (inferenced data) to files
                 with open(output_folder + '/feats_vq_' + str(next(iterator)), 'wb') as f:
@@ -106,26 +109,56 @@ class InferenceModel(object):
                 # gather_wrong.fill(1e-5)
                 # gather_vq = np.zeros(127)
                 # gather_vq.fill(1e-5)
+                # gather_comb = np.zeros(127)
+                # gather_comb.fill(1e-5)
                 #
                 # for key, entry in check_data.items():
-                #     tmp_van = entry[0] == entry[2]  # right pred of vanilla
+                #     tmp_van = entry[0] == entry[3]  # right pred of vanilla
+                #     tmp_vq = entry[1] == entry[3]  # right pred of vanilla
+                #     tmp_comb = entry[2] == entry[3]  # right pred of vanilla
+                #
+                #     # np.max(np.expand_dims(~tmp_vq, 1) * output_all[key], axis=1)
+                #
+                #     comb_right = [t for t, x in enumerate(tmp_comb) if x]
+                #     comb_wrong = [t for t, x in enumerate(~tmp_comb) if x]
+                #     vq_right = [t for t, x in enumerate(tmp_vq) if x]
+                #     vq_wrong = [t for t, x in enumerate(~tmp_vq) if x]
                 #     van_right = [t for t, x in enumerate(tmp_van) if x]
                 #     van_wrong = [t for t, x in enumerate(~tmp_van) if x]
                 #
-                #     list_vq = ~(entry[0] == entry[2]) == (entry[1] == entry[2])
-                #     ind_vq = [t for t, x in enumerate(list_vq) if x]
+                #     list_vq = ~(entry[0] == entry[3]) == (entry[1] == entry[3])
+                #     list_comb = (entry[0] == entry[3]) == ~(entry[2] == entry[3])
+                #     ind_vq_true = [t for t, x in enumerate(list_vq) if x]
+                #     ind_comb_true = [t for t, x in enumerate(list_comb) if x]
+                #     ind_vq_false = [t for t, x in enumerate(list_vq) if not x]
+                #     # est = output_all[key][1]
                 #
-                #     print(len(van_right))
-                #     print(len(van_wrong))
-                #     print(len(van_right) + len(van_wrong))
+                #
+                #     # plt.subplot(2, 1, 1)
+                #     # # plt.hist(np.ndarray.flatten(np.expand_dims(list_vq, 1) * output_all[key]), bins=100, range=[1e-15, 1])
+                #     # plt.hist(-np.sum(np.log2(output_all[key][0]) * output_all[key][0], axis=1), bins=10)
+                #     # plt.subplot(2, 1, 2)
+                #     # # plt.hist(np.ndarray.flatten(np.expand_dims(~list_vq, 1) * output_all[key]), bins=100, range=[1e-15, 1])
+                #     # plt.hist(-np.sum(np.log2(output_all[key][1]) * output_all[key][1], axis=1), bins=10)
+                #     # plt.show()
+                #
+                #     print('right comb: ' + str(len(comb_right)))
+                #     print('wrong comb: ' + str(len(comb_wrong)))
+                #     print('right vq: ' + str(len(vq_right)))
+                #     print('wrong vq: ' + str(len(vq_wrong)))
+                #     print('right van: ' + str(len(van_right)))
+                #     print('wrong van: ' + str(len(van_wrong)))
+                #     # print(len(van_right) + len(van_wrong))
                 #     # print(entry[2][van_wrong])
-                #     gather_right[entry[2][van_right]] += 1.0
-                #     gather_wrong[entry[2][van_wrong]] += 1.0
-                #     gather_vq[entry[2][ind_vq]] += 1.0
+                #     gather_right[entry[3][comb_right]] += 1.0
+                #     gather_wrong[entry[3][comb_wrong]] += 1.0
+                #     gather_vq[entry[3][ind_vq_true]] += 1.0
+                #     gather_comb[entry[3][ind_comb_true]] += 1.0
                 #     # print(len(van_right) + len(van_wrong))
                 #     # print(len(entry[2]))
-                #     print(sum(list_vq) / len(entry[2]))
-                #
+                #     print(sum(list_comb) / len(entry[3]))
+                #     print(sum(list_vq) / len(entry[3]))
+
                 # plt.subplot(3, 1, 1)
                 # plt.bar(range(0, 127), gather_right)
                 # plt.subplot(3, 1, 2)
@@ -178,13 +211,14 @@ class InferenceModel(object):
         #     sess.run(tf.global_variables_initializer())
         #     output = sess.run(logits,
         #                            feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-        logits = self._graph.get_tensor_by_name("combination_network/nn_output:0")
-        # print(logits)
-        output = self._session.run(logits, feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-        output += 1e-30
-        # output_van = self._session.run("vanilla_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-        # output_vq = self._session1.run("base_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False})
-        # print(np.argmax(output, axis=1))
+        # logits = self._graph.get_tensor_by_name("combination_network/nn_output:0")
+        # # print(logits)
+        # output = self._session.run(logits, feed_dict={"ph_features:0": np_mat, "is_train:0": False})
+        # output += 1e-30
+        output_van = self._session.run("vanilla_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
+        output_vq = self._session.run("base_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
+        output_comb = self._session.run("combination_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
+
         # print(np.max(output, axis=1))
         # transform data with "continuous trick"
         # here same theory:
@@ -194,8 +228,8 @@ class InferenceModel(object):
         if self.transform:
             if self.cond_prob is not None:
                 # print("Transform output to 127 pdf...")
-                # output_vq = np.dot(output_vq, self.cond_prob)
-                pass
+                output_vq = np.dot(output_vq, self.cond_prob)
+                # pass
             else:
                 raise ValueError("cond_prob is None, please check!")
         # if we don't do the "continuous trick" we output discrete labels
@@ -204,15 +238,46 @@ class InferenceModel(object):
             output_vq = np.argmax(output, axis=1)
             output_vq = output_vq.astype(np.float64, copy=False)
 
-        # output = self.posterior_combination(np.log(output_van), np.log(output_vq), 0.25)
-        # output -= np.log(self.prior)
+        # print(np.argmax(output_van, axis=1))
+        # print(np.argmax(output_vq, axis=1))
 
+        # tmp = np.sum(np.argmax(output_van, axis=1) == np.argmax(output_vq, axis=1)) / np.shape(output_van)[0]
+        # print(tmp)
+        # output = self.posterior_combination(np.log(output_van), np.log(output_vq), 0.25)
+
+        # output = np.log(self.min_max_combination(output_van, output_vq))
+        # output -= np.log(self.prior)
+        output = output_comb
+        output += 1e-30
         # # flag for setting log-output or normal output
         if self.log_ouput:
             # print(np.min(output))
             output /= self.prior    # divide through prior to get pseudo-likelihood
             output = np.log(output)
         return output
+
+    @staticmethod
+    def min_max_combination(posterior_1, posterior_2):
+        """
+        Taking the maximum posterior
+
+        :param log_posterior_1:
+        :param log_posterior_2:
+        :return:
+        """
+        max_post_1 = np.max(posterior_1, axis=1)
+        max_post_2 = np.max(posterior_2, axis=1)
+
+        # max mask reference to post 1
+        mask_max = max_post_1 > max_post_2
+
+        combined_post = np.expand_dims(mask_max, 1) * posterior_1 + np.expand_dims(~mask_max, 1) * posterior_2
+
+        return combined_post
+
+
+
+
 
     @staticmethod
     def posterior_combination(log_posterior_1, log_posterior_2, alpha):
@@ -235,21 +300,37 @@ class InferenceModel(object):
         self._session1 = tf.Session(graph=self._graph1)
         # self._session1.run(tf.global_variables_initializer())
 
-    def _create_graph(self, meta_file):
+    def _create_graph(self, meta_file, identifier=None):
         """
         Create graph and load model (file comes out of the training)
         """
         # print(os.path.dirname(meta_file))
-        path = os.path.dirname(meta_file)
-        # path_van = os.path.dirname(meta_file) + '/van_graph'
-        # path_vq = os.path.dirname(meta_file) + '/vq_graph'
+        if identifier is not None:
+            path_van = os.path.dirname(meta_file) + '/van_graph'
+            path_vq = os.path.dirname(meta_file) + '/vq_graph'
+            with self._graph.as_default():
+                saver = tf.train.import_meta_graph(path_van + '/saved_model.meta')
+                saver.restore(self._session, tf.train.latest_checkpoint(path_van))
+            # tf.reset_default_graph()
+            # self._create_session()
+            #
+            # self._graph1 = tf.get_default_graph()
+            with self._graph1.as_default():
+                saver = tf.train.import_meta_graph(path_vq + '/saved_model.meta')
+                saver.restore(self._session1, tf.train.latest_checkpoint(path_vq))
+            # tf.reset_default_graph()
+
+        else:
+            path = os.path.dirname(meta_file)
+            with self._graph.as_default():
+                saver = tf.train.import_meta_graph(path + '/saved_model.meta')
+                saver.restore(self._session, tf.train.latest_checkpoint(path))
+
 
         # saver = tf.train.import_meta_graph(meta_file)
-        # saver.restore(self._session, tf.train.latest_checkpoint(path_van))
+        # saver.restore(self._session, tf.train.latest_checkpoint(os.path.dirname(meta_file)))
         # self._graph = tf.get_default_graph()
-        with self._graph.as_default():
-            saver = tf.train.import_meta_graph(path + '/saved_model.meta')
-            saver.restore(self._session, tf.train.latest_checkpoint(path))
+
         #  with self._graph.as_default():
         #     saver = tf.train.import_meta_graph(path_van + '/saved_model.meta')
         #     saver.restore(self._session, tf.train.latest_checkpoint(path_van))

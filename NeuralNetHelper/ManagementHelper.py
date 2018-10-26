@@ -123,16 +123,17 @@ class Management(object):
     def restore_model(self, meta_data=None):
         # if we call this function, set restore boolean
         Settings.restore = True
-        self._session.run(tf.global_variables_initializer())
-        self._session.run(tf.local_variables_initializer())
+
+        # self._session.run(tf.global_variables_initializer())
+        # self._session.run(tf.local_variables_initializer())
 
         # decide what path to use
-        if meta_data is not None:
-            path_checkpoint = meta_data
-        else:
-            path_checkpoint = Settings.path_restore
-
-        # check if there is a checkpoint
+        # if meta_data is not None:
+        #     path_checkpoint = meta_data
+        # else:
+        #     path_checkpoint = Settings.path_restore
+        #
+        # # check if there is a checkpoint
         # if tf.train.latest_checkpoint(meta_data) is not None:
         #     print('Restore old model and train it further..')
         #     self._saver.restore(self._session, tf.train.latest_checkpoint(path_checkpoint))
@@ -158,11 +159,11 @@ class Management(object):
         saver = tf.train.Saver(var_list=vq_collection)
         saver.restore(self._session, tf.train.latest_checkpoint(path_vq))
 
-        # saver = tf.train.import_meta_graph(path_van + '/saved_model.meta')
-        # saver.restore(self._session, tf.train.latest_checkpoint(path_van))
-        # with self._graph.as_default():
-        #     saver = tf.train.import_meta_graph(path_vq + '/saved_model.meta')
-        #     saver.restore(self._session, tf.train.latest_checkpoint(path_vq))
+        saver = tf.train.import_meta_graph(path_van + '/saved_model.meta')
+        saver.restore(self._session, tf.train.latest_checkpoint(path_van))
+        with self._graph.as_default():
+            saver = tf.train.import_meta_graph(path_vq + '/saved_model.meta')
+            saver.restore(self._session, tf.train.latest_checkpoint(path_vq))
 
     # def _init_vars(self):
     #     if self._session is not None:
@@ -195,7 +196,8 @@ class Management(object):
     def _init_model(self):
         # import P(s_k|m_j)
         self._p_s_m = self._misc.set_probabilities('model_checkpoint/vq_graph/p_s_m.mat')
-        self._model = Model(self._ph_train, self._ph_features, Settings, input_tensor=self._p_s_m)
+        self._model = Model(self._ph_train, self._ph_features, Settings, input_tensor=self._p_s_m,
+                            ph_output=self._ph_last_layer)
 
     def _init_saver(self):
         # list_restore = [v for v in tf.trainable_variables()]
@@ -239,10 +241,11 @@ class Management(object):
 
     def _init_before_train(self, identifier=None):
         # we create different dicts depending on the task
-        if identifier == 'nnvq':
+        self._train_dict = {}
+
+        if 'nnvq' in identifier:
             # create dict
-            self._train_dict = {
-                'nnvq': {'mi': self._misc.calculate_mi_tf(self._model.inference, self._ph_labels),
+            self._train_dict['nnvq'] = {'mi': self._misc.calculate_mi_tf(self._model.inference, self._ph_labels),
                          'joint_prob': self._misc.joint_probability(self._model.inference, self._ph_labels),
                          'cond_prob': self._misc.conditioned_probability(self._model.inference, self._ph_labels,
                                                                          discrete=Settings.sampling_discrete),
@@ -260,16 +263,16 @@ class Management(object):
                                                control_dep=tf.get_collection(tf.GraphKeys.UPDATE_OPS)).get_train_op(
                              global_step=self._global_step),
                          'output': self._model.inference,
-                         'count': self._global_step}}
+                         'count': self._global_step}
 
             # create loggers
-            tf.summary.scalar('train/loss', self._train_dict[identifier]['loss'])
-            tf.summary.scalar('train/mutual_information', self._train_dict[identifier]['mi'][0])
-            tf.summary.scalar('train/H(w)', self._train_dict[identifier]['mi'][1])
-            tf.summary.scalar('train/H(y)', self._train_dict[identifier]['mi'][2])
-            tf.summary.scalar('train/H(w|y)', self._train_dict[identifier]['mi'][3])
+            tf.summary.scalar('train/loss', self._train_dict['nnvq']['loss'])
+            tf.summary.scalar('train/mutual_information', self._train_dict['nnvq']['mi'][0])
+            tf.summary.scalar('train/H(w)', self._train_dict['nnvq']['mi'][1])
+            tf.summary.scalar('train/H(y)', self._train_dict['nnvq']['mi'][2])
+            tf.summary.scalar('train/H(w|y)', self._train_dict['nnvq']['mi'][3])
             tf.summary.scalar('misc/learning_rate', Settings.learning_rate_pre)
-            self._train_dict[identifier]['merge'] = tf.summary.merge_all()
+            self._train_dict['nnvq']['merge'] = tf.summary.merge_all()
 
         elif identifier == 'vanilla':
             # create codebook
@@ -293,19 +296,47 @@ class Management(object):
             tf.summary.scalar('train/accuracy', self._train_dict[identifier]['accuracy'][0])
             self._train_dict[identifier]['merge'] = tf.summary.merge_all()
 
+        elif identifier == 'nnvq':
+            self._train_dict = {
+                'nnvq': {'loss': Loss(self._model.logits, self._ph_labels,
+                                         identifier='nnvq', cond_prob=self._misc.conditioned_probability(
+                        self._model.inference_nnvq, self._ph_labels, discrete=Settings.sampling_discrete)).loss,
+                        'train_op': Optimizer(Settings.learning_rate_pre,
+                                      loss=Loss(self._model.logits, self._ph_labels,
+                                                identifier='nnvq', cond_prob=self._misc.conditioned_probability(
+                self._model.inference_nnvq, self._ph_labels, discrete=Settings.sampling_discrete)).loss,
+                                                  control_dep=tf.get_collection(tf.GraphKeys.UPDATE_OPS)).get_train_op(
+                                global_step=self._global_step),
+                        'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._ph_labels),
+                        'output': self._model.inference,
+                        'count': self._global_step,
+                        'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._ph_labels, self._nominator,
+                                                       self._denominator),
+                            }
+            }
+
+            # create loggers
+            tf.summary.scalar('train/loss', self._train_dict[identifier]['loss'])
+            tf.summary.scalar('misc/learning_rate', Settings.learning_rate_pre)
+
+            self._train_dict[identifier]['merge'] = tf.summary.merge_all()
+
         elif identifier == 'combination':
             # define loss out of 3 losses
-            # l1_vanilla = Loss(self._model.logits_vanilla, self._ph_labels, identifier='vanilla').loss
-            # l2_vq = Loss(self._model.inference_nnvq, self._ph_labels, cond_prob=self._misc.conditioned_probability(
-            #     self._model.inference_nnvq, self._ph_labels, discrete=Settings.sampling_discrete), identifier='nnvq').loss
-            # l3_combination = Loss(self._model.logits_combination, self._ph_labels, identifier='vanilla').loss
-            # loss = l3_combination + l2_vq
+            l1_vanilla = Loss(self._model.logits_vanilla, self._ph_labels, identifier='vanilla').loss
+            l2_vq = Loss(self._model.inference_nnvq, self._ph_labels, cond_prob=self._misc.conditioned_probability(
+                self._model.inference_nnvq, self._ph_labels, discrete=Settings.sampling_discrete), identifier='nnvq').loss
+            l3_combination = Loss(self._model.logits_combination, self._ph_labels, identifier='vanilla').loss
+
+            loss = 0.45 * l1_vanilla + 0.1 * l2_vq + 0.45 * l3_combination
             # loss = l2_vq
+
+            # Loss(self._model.inference_combination, self._ph_labels, identifier='own').loss
 
             # scope = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='nnvq_network')
             self._train_dict = {
                 'combination': {'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._ph_labels),
-                                'loss': Loss(self._model.logits_combination, self._ph_labels, identifier='vanilla').loss,
+                                'loss': loss,
 
                                 'accuracy_vanilla': tf.metrics.accuracy(self._ph_labels,
                                                                         tf.argmax(self._model.inference_vanilla, axis=1)),
@@ -316,19 +347,87 @@ class Management(object):
                                 'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._ph_labels, self._nominator,
                                                               self._denominator),
                                 'train_op': Optimizer(Settings.learning_rate_pre,
-                                                      loss=Loss(self._model.logits_combination, self._ph_labels,
-                                                                identifier='vanilla').loss,
+                                                      loss=loss,
                                                       control_dep=tf.get_collection(
-                                  tf.GraphKeys.UPDATE_OPS)).get_train_op(
+                                                          tf.GraphKeys.UPDATE_OPS)).get_train_op(
                                     global_step=self._global_step,
-                                    var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='combination_network')),
-                                'test': "vanilla_network/batch_normalization/moving_mean:0"
+                                    var_list=None)
+
+
                 }
             }
 
+        if 'restore' in identifier:
+            self._train_dict['restore'] = {'loss': Loss(self._model.logits_combination, self._ph_labels,
+                                         identifier='vanilla').loss,
+                        'train_op': Optimizer(Settings.learning_rate_pre,
+                                      loss=Loss(self._model.logits_combination, self._ph_labels,
+                                                identifier='vanilla').loss,
+                                                  control_dep=tf.get_collection(tf.GraphKeys.UPDATE_OPS)).get_train_op(
+                                global_step=self._global_step, var_list=tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES,
+                                                                                          scope='combination_network')),
+                        'output': self._model.inference_combination,
+                        'count': self._global_step,
+                        'accuracy_combination': tf.metrics.accuracy(self._ph_labels,
+                                                                        tf.argmax(self._model.inference_combination,
+                                                                                  axis=1))
+                                           }
+
+        if 'front' in identifier:
+            print('here')
+            # define loss out of 3 losses
+            l1_vanilla = Loss(self._model.logits_vanilla, self._ph_labels, identifier='vanilla').loss
+            l2_vq = Loss(self._model.inference_nnvq, self._ph_labels, cond_prob=self._misc.conditioned_probability(
+                self._model.inference_nnvq, self._ph_labels, discrete=Settings.sampling_discrete), identifier='nnvq').loss
+
+            loss = 0.5 * l1_vanilla + 0.5 * l2_vq
+
+            var_base = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='base_network')
+            var_van = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='vanilla_network')
+            var_group = var_base + var_van
+            # loss = l2_vq
+
+            # Loss(self._model.inference_combination, self._ph_labels, identifier='own').loss
+
+            # scope = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='nnvq_network')
+            self._train_dict['front'] = {'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._ph_labels),
+                                'loss': loss,
+
+                                'accuracy_vanilla': tf.metrics.accuracy(self._ph_labels,
+                                                                        tf.argmax(self._model.inference_vanilla, axis=1)),
+                                'output': self._model.inference_vanilla,
+                                'count': self._global_step,
+                                'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._ph_labels, self._nominator,
+                                                              self._denominator),
+                                'train_op': Optimizer(Settings.learning_rate_pre,
+                                                      loss=loss,
+                                                      control_dep=tf.get_collection(
+                                                          tf.GraphKeys.UPDATE_OPS)).get_train_op(
+                                    global_step=self._global_step,
+                                    var_list=var_group)
+
+
+                                }
+        # create loggers
+        tf.summary.scalar('train/loss_front', self._train_dict['front']['loss'])
+        tf.summary.scalar('misc/learning_rate', Settings.learning_rate_pre)
+
+        self._train_dict['front']['merge'] = tf.summary.merge_all()
+        self._session.run(tf.local_variables_initializer())
+        self._session.run(tf.global_variables_initializer())
+
+        # 'train_op': Optimizer(Settings.learning_rate_pre,
+        #                       loss=loss,
+        #                       control_dep=tf.get_collection(
+        #                           tf.GraphKeys.UPDATE_OPS)).get_train_op(
+        #     global_step=self._global_step,
+        #     var_list=None)
+
+        # 'alpha': tf.reduce_max(self._model.alpha)
         # 'train_op': Optimizer(Settings.learning_rate_pre, loss=loss,
         #                       control_dep=tf.get_collection(
         #                           tf.GraphKeys.UPDATE_OPS)).get_train_op(global_step=self._global_step),
+        # tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='combination_network')
 
         # create loggers
         # tf.summary.scalar('train/loss', self._train_dict[identifier]['loss'])
@@ -362,8 +461,8 @@ class Management(object):
             print('Cannot identify string, returning full list')
             return [v for v in tf.trainable_variables()]
 
-    @show_timing(text='test', verbosity=2)
-    def train_single_epoch(self, identifier=None):
+    @show_timing(text='train', verbosity=2)
+    def train_single_epoch(self, identifier=None, train_bn=True):
         """
         Train single epoch
 
@@ -377,19 +476,18 @@ class Management(object):
             try:
                 feat, labs = self._session.run([self._input_train[0], self._input_train[1]])
                 # variables_names = [v.name for v in tf.trainable_variables()]
-                # print(variables_names[6])
-                # print(variables_names[14])
-                # # values = self._session.run(variables_names)
-                # # for k, v in zip(variables_names, values):
-                # #     print("Variable: ", k)
-                # #     print("Shape: ", v.shape)
-                # #     print(v)
+                # values = self._session.run(variables_names)
+                # for k, v in zip(variables_names, values):
+                #     print("Variable: ", k)
+                #     print("Shape: ", v.shape)
+                #     print(v)
                 # exit()
 
                 return_dict = self._session.run(self._train_dict[Settings.identifier],
-                                                feed_dict={self._ph_train: False, self._ph_features: feat,
+                                                feed_dict={self._ph_train: train_bn, self._ph_features: feat,
                                                            self._ph_labels: labs,
-                                                           self._ph_lr: Settings.learning_rate_pre})
+                                                           self._ph_lr: Settings.learning_rate_pre,
+                                                           self._ph_last_layer: True})
 
                 # print(return_dict['test'][0])
                 # check for exponential decayed learning rate and set it
@@ -410,7 +508,27 @@ class Management(object):
                         summary_tmp.value.add(tag='train/acc_vanilla', simple_value=return_dict['accuracy_vanilla'][0])
                         summary_tmp.value.add(tag='train/accuracy',
                                               simple_value=return_dict['accuracy_combination'][0])
+                    elif Settings.identifier == 'nnvq':
+                        summary_tmp.value.add(tag='train/mutual_information', simple_value=return_dict['mi'][0])
+                        summary_tmp.value.add(tag='train/H(w)', simple_value=return_dict['mi'][1])
+                        summary_tmp.value.add(tag='train/H(y)', simple_value=return_dict['mi'][2])
+                        summary_tmp.value.add(tag='train/H(w|y)', simple_value=return_dict['mi'][3])
+                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
+                    elif Settings.identifier == 'vanilla':
+                        summary_tmp.value.add(tag='train/accuracy', simple_value=return_dict['accuracy'][0])
+                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
+                    elif Settings.identifier == 'restore':
+                        summary_tmp.value.add(tag='train/accuracy', simple_value=return_dict['accuracy_combination'][0])
+                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
+                    if Settings.identifier == 'front':
+                        summary_tmp.value.add(tag='train/mutual_information', simple_value=return_dict['mi'][0])
+                        summary_tmp.value.add(tag='train/H(w)', simple_value=return_dict['mi'][1])
+                        summary_tmp.value.add(tag='train/H(y)', simple_value=return_dict['mi'][2])
+                        summary_tmp.value.add(tag='train/H(w|y)', simple_value=return_dict['mi'][3])
+                        summary_tmp.value.add(tag='misc/learning_rate', simple_value=Settings.learning_rate_pre)
+                        summary_tmp.value.add(tag='train/acc_vanilla', simple_value=return_dict['accuracy_vanilla'][0])
                     summary_tmp.value.add(tag='train/loss', simple_value=return_dict['loss'])
+                    # summary_tmp.value.add(tag='misc/alpha', simple_value=return_dict['alpha'])
                     self._train_writer.add_summary(summary_tmp, return_dict['count'])
                     self._train_writer.flush()
 
@@ -428,10 +546,12 @@ class Management(object):
                 # self._train_writer.flush()
                 break
 
+    @show_timing(text='validation', verbosity=2)
     def do_validation(self):
         """
         Perform validation on the current model
         """
+        # TODO !!!!!
 
         self._feeder.init_dev()
         features_all = []
@@ -448,31 +568,48 @@ class Management(object):
                 features_all = np.concatenate(features_all)
                 labels_all = np.concatenate(labels_all)
 
+                data_all = list(zip(features_all, labels_all))
+
+                # pick subset to fit onto the gpu
+                sub_percentage = 0.5
+                sub_indices = np.random.choice(len(data_all), int(sub_percentage * len(data_all)), replace=False)
+                sub_data = [data_all[i] for i in sub_indices]
+
+                features_all, labels_all = zip(*sub_data)
+
                 # mi_test = sum_mi / self._count_mi
                 # mi_vald = self._session.run(self._mutual_information, feed_dict={self._ph_train: False, self._ph_features:
                 #     features_all, self._ph_labels: labels_all})
-                sub_dict = dict((k, self._train_dict[Settings.identifier][k]) for k in ('accuracy_combination', 'mi', 'count')
+                sub_dict = dict((k, self._train_dict[Settings.identifier][k]) for k in ('count', 'accuracy_combination', 'mi')
                                 if k in self._train_dict[Settings.identifier])
                 return_dict = self._session.run(sub_dict,
                                                 feed_dict={self._ph_train: False, self._ph_features: features_all,
                                                            self._ph_labels: labels_all,
-                                                           self._ph_lr: Settings.learning_rate_pre})
+                                                           self._ph_lr: Settings.learning_rate_pre,
+                                                           self._ph_last_layer: False})
 
                 summary_tmp = tf.Summary()
                 if Settings.identifier == 'combination':
                     summary_tmp.value.add(tag='validation/mutual_information', simple_value=return_dict['mi'][0])
                     summary_tmp.value.add(tag='validation/accuracy', simple_value=return_dict['accuracy_combination'][0])
+                elif Settings.identifier == 'vanilla':
+                    summary_tmp.value.add(tag='validation/accuracy', simple_value=return_dict['accuracy'][0])
+                elif Settings.identifier == 'nnvq':
+                    summary_tmp.value.add(tag='validation/mutual_information', simple_value=return_dict['mi'][0])
+                elif Settings.identifier == 'restore':
+                    summary_tmp.value.add(tag='validation/accuracy', simple_value=return_dict['accuracy_combination'][0])
+
                 self._train_writer.add_summary(summary_tmp, return_dict['count'])
                 self._train_writer.flush()
 
-                # print(self._count_mi)
                 # TODO save current mi
                 if return_dict['accuracy_combination'][0] > self._current_mi:
                     print('Saving better model...')
                     self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
                     self._current_mi = return_dict['accuracy_combination'][0]
 
-                return_dict = {}
+
+                # return_dict = {}
                 break
 
     def create_p_s_m(self):

@@ -14,9 +14,12 @@ class Optimizer(object):
 
     def get_train_op(self, var_list=None, global_step=None):
         with tf.control_dependencies(self._control):
-            gradients = self._optimizer.compute_gradients(self._loss, var_list=var_list)  # list_restore[5:]
+            # gradients = self._optimizer.compute_gradients(self._loss, var_list=var_list)  # list_restore[5:]
+            gradients, variables = zip(*self._optimizer.compute_gradients(self._loss, var_list=var_list))
+            gradients, _ = tf.clip_by_global_norm(gradients, 0.25)
             # print(gradients)
-            return self._optimizer.apply_gradients(gradients, global_step=global_step)
+            return self._optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
+            # return self._optimizer.apply_gradients(gradients, global_step=global_step)
 
     def _set_optimizer(self):
         if self._name == 'ADAM':
