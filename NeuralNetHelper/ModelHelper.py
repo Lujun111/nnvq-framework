@@ -1,27 +1,26 @@
 import tensorflow as tf
-# import tensorflow_probability as tfp
-from scipy.special._ufuncs import ker
+from NeuralNetHelper.MiscNNHelper import MiscNN
 
 
 class Model(object):
     """
     Creates a model object
     """
-    def __init__(self, ph_train, ph_features, settings, input_tensor=None, ph_output=None):
+    def __init__(self, ph_train, ph_features, settings, ph_output=None):
         """
         Init the Model
 
         :param input_batch: size of batch
         """
         # set settings
-        self.settings = settings
+        self._settings = settings
 
         # input placeholders
         # self.train = tf.placeholder(tf.bool, name="is_train")
         # self.features = tf.placeholder(tf.float32, shape=[None, self.settings.dim_features], name='ph_features')
         self.train = ph_train
         self.features = ph_features
-        self._input_tensor = input_tensor
+        self._misc = MiscNN(settings)
         self.train_output = ph_output
 
         # output of model
@@ -32,17 +31,16 @@ class Model(object):
         self.scale = None
 
         # create model
-        # if self.settings.identifier == 'nnvq':
-        #     self._build_model_vq()
-        # elif self.settings.identifier == 'vanilla':
-        #     self._build_model_vanilla()
-        # elif self.settings.identifier == 'combination':
-        #     self._build_combination()
+        if self._settings.identifier == 'nnvq':
+            self._build_model_vq()
+        elif self._settings.identifier == 'vanilla':
+            self._build_model_vanilla()
+        elif self._settings.identifier == 'combination':
+            self._build_combination()
         # elif self.settings.identifier == 'restore':
         #     self._build_combination()
-        # elif self.settings.identifier == 'front':
-        self._build_combination()
-            # pass
+
+        self._input_tensor = self._misc.set_probabilities('model_checkpoint/vq_graph/p_s_m.mat')
 
     def _build_model_vq(self):
         """
@@ -73,8 +71,8 @@ class Model(object):
             # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
 
             # WTA-layer starts here
-            out = tf.layers.dense(fc2_dropout, self.settings.codebook_size, activation=tf.nn.sigmoid)
-            out_scaled = tf.scalar_mul(self.settings.scale_soft, out)
+            out = tf.layers.dense(fc2_dropout, self._settings.codebook_size, activation=tf.nn.sigmoid)
+            out_scaled = tf.scalar_mul(self._settings.scale_soft, out)
             # output without softmax
             self.logits = out_scaled
             # output with soft, be aware use a name 'nn_output' for the output node!
@@ -149,8 +147,8 @@ class Model(object):
             # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
 
             # WTA-layer starts here
-            out = tf.layers.dense(fc2_dropout, self.settings.codebook_size, activation=tf.nn.sigmoid)
-            out_scaled = tf.scalar_mul(self.settings.scale_soft, out)
+            out = tf.layers.dense(fc2_dropout, self._settings.codebook_size, activation=tf.nn.sigmoid)
+            out_scaled = tf.scalar_mul(self._settings.scale_soft, out)
             # out_scaled = tf.multiply(self.scale, out)
             # out_scaled = tf.Print(out_scaled, [out_scaled])
             # output without softmax
