@@ -15,12 +15,12 @@ from NeuralNetHelper.OptimizerHelper import Optimizer
 from KaldiHelper.InferenceHelper import InferenceModel
 
 
-class Management(object):
+class Train(object):
     """
     This class manages everything
     """
     # TODO interface for Management object?
-    def __init__(self):
+    def __init__(self, session, data_feeder, misc, model, saver, placeholders, variables):
         # define some fields
         self._session = None
         self._graph = None
@@ -209,13 +209,9 @@ class Management(object):
         self._misc = MiscNN(Settings)
 
     def _init_data_feeder(self):
-        dict_lists_tfrecords = {
-            'train': [Settings.path_train + '/' + s for s in os.listdir(Settings.path_train)],
-            'test': [Settings.path_test + '/' + s for s in os.listdir(Settings.path_test)],
-            'dev': [Settings.path_dev + '/' + s for s in os.listdir(Settings.path_dev)]}
 
         # define feeder
-        self._feeder = DataFeeder(dict_lists_tfrecords, Settings, self._session)
+        self._feeder = DataFeeder(Settings, self._session)
 
         # create 3 pipelines for features
         self._input_train = self._feeder.train.get_next()

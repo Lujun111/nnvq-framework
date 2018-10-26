@@ -1,22 +1,22 @@
 import tensorflow as tf
+import os
 
 
 class DataFeeder(object):
     """
         DataFeeder feeding data into the network in training
     """
-    def __init__(self, dict_lists, settings, sess):
+    def __init__(self, settings, sess):
         """
-        :param list_tfrecords:  list of tfrecord files in a folder
         :param batch_size:      batch size for training
         :param dim_features:    dimension of features
         :param dim_phonemes:    dimension of labels
         """
 
-        if {'train', 'test', 'dev'} <= set(dict_lists):
-            self._dict_lists = dict_lists
-        else:
-            raise ValueError('You are missing keys in the dict')
+        self._dict_lists = {
+            'train': [settings.path_train + '/' + s for s in os.listdir(settings.path_train)],
+            'test': [settings.path_test + '/' + s for s in os.listdir(settings.path_test)],
+            'dev': [settings.path_dev + '/' + s for s in os.listdir(settings.path_dev)]}
         self._batch_size = settings.batch_size
         self._dim_features = settings.dim_features
         self._dim_phonemes = settings.dim_labels

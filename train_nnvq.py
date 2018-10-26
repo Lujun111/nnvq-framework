@@ -9,7 +9,7 @@ from NeuralNetHelper.MiscNNHelper import MiscNN
 from NeuralNetHelper.ModelHelper import Model
 from NeuralNetHelper import Settings
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
-from NeuralNetHelper.ManagementHelper import Management
+from NeuralNetHelper.TrainHelper import Management
 
 
 sess = tf.Session()
