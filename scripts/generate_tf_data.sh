@@ -8,7 +8,6 @@ cd $kaldi_path
 . ./path.sh
 # cd back to project folder
 # cd ~/nnvq-framework
-
 source ~/tensorflow_py3/bin/activate
 
 nj=20
@@ -26,19 +25,20 @@ if [ -f path.sh ]; then . ./path.sh; fi
 
 if [ $# != 4 ]; then
   echo "Usage: generate_tf_data.sh [options] <data> <alignment-dir> <own-exp-dir> <working-dir>"
-  echo " e.g.: generate_tf_data.sh "
+  echo " e.g.: generate_tf_data.sh --nj 35 train_20kshort_nodup exp/tri3 exp/mono output_folder"
   echo "main options (for others, see top of script file)"
   echo "  --config <config-file>                           # config containing options"
   echo "  --nj <nj>                                        # number of parallel jobs"
   echo "  --cmd (utils/run.pl|utils/queue.pl <queue opts>) # how to run jobs."
-  echo "  --state-based state-based"
+  echo "  --state-based <true/false>                       # state-base or phoneme labels"
+  echo "  --train_data <true/false>                        # create only train data or also dev/test data"
   exit 1;
 fi
 
 data=$1
 source_dir=$kaldi_path/$2
 own_model_dir=$kaldi_path/$3
-working_dir=$4
+working_dir=$framework_path/scripts/$4
 
 # create log folder in working dir
 mkdir -p $working_dir/log $working_dir/alignments $working_dir/tf_data
@@ -102,7 +102,9 @@ fi
 if [ $stage -le -1 ]; then
     echo "---filter the features and merge them with the labels ---"
     mkdir -p $working_dir/tmp
-    python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $nj $data $ali_dir $working_dir/tf_data
+    python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $nj $data $ali_dir $working_dir/tmp
+    # # remove some files
+    rm $working_dir/tmp/features_{1..35} 2>/dev/null
 fi
 
 if [ $stage -le 0 ]; then

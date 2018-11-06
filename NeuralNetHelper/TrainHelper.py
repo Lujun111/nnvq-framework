@@ -17,7 +17,7 @@ class Train(object):
     This class manages everything
     """
     # TODO interface for Management object?
-    def __init__(self, session, settings, model, misc, optimizer, loss, data_feeder, placeholders, variables):
+    def __init__(self, session, settings, model, misc, optimizer, loss, data_feeder, saver, placeholders, variables):
         self._session = session
         self._settings = settings
         self._model = model
@@ -26,7 +26,7 @@ class Train(object):
         self._optimizer = optimizer
         self._placeholders = placeholders
         self._variables = variables
-        self._saver = tf.train.Saver()
+        self._saver = saver
         self._summary = Summary(settings)
 
         self._feeder = data_feeder
@@ -155,7 +155,7 @@ class Train(object):
                 'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
                                               self._variables['nominator'], self._variables['denominator']),
                 'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
+                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'], clipping=False),
                 'output': self._model.inference,
                 'count': self._variables['global_step']}
 
@@ -284,22 +284,7 @@ class Train(object):
                 self._train_writer.flush()
 
                 # save depending on model
-                # TODO solve it better @Tobias
-                if self._settings == 'vanilla':
-                    if return_dict['accuracy'][0] > self._current_value:
-                        print('Saving better model...')
-                        self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
-                        self._current_value = return_dict['accuracy'][0]
-                elif self._settings == 'combination':
-                    if return_dict['accuracy_combination'][0] > self._current_value:
-                        print('Saving better model...')
-                        self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
-                        self._current_value = return_dict['accuracy_combination'][0]
-                elif self._settings == 'nnvq':
-                    if return_dict['mi'][0] > self._current_value:
-                        print('Saving better model...')
-                        self._saver.save(self._session, Settings.path_checkpoint + '/saved_model')
-                        self._current_value = return_dict['mi'][0]
+                self._saver.save(return_dict)
                 break
 
     def create_p_s_m(self):

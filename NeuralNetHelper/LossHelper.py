@@ -35,10 +35,12 @@ class Loss(object):
                                                         self._model.logits)
         # loss for training a nnvq network
         elif self._settings.identifier == 'nnvq':
-            cond_prob = self._misc.conditioned_probability(self._model.logits, self._labels,
+            cond_prob = self._misc.conditioned_probability(self._model.inference, self._labels,
                                                            discrete=self._settings.sampling_discrete)
-            used_loss = tf.reduce_mean(-tf.reduce_sum(tf.one_hot(tf.squeeze(self._labels), 127, axis=1) *
-                                                      tf.log(tf.tensordot(self._model.logits, tf.transpose(cond_prob),
+
+            smoothed_labels = self._misc.label_smoothing(tf.one_hot(tf.squeeze(self._labels), 127, axis=1), epsilon=0.1)
+            used_loss = tf.reduce_mean(-tf.reduce_sum(smoothed_labels *
+                                                      tf.log(tf.tensordot(self._model.inference, tf.transpose(cond_prob),
                                                                           axes=1)), reduction_indices=[1]))
         elif self._settings.identifier == 'combination':
             cond_prob = self._misc.conditioned_probability(self._model.logits, self._labels,

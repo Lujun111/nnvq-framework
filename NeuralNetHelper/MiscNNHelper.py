@@ -272,4 +272,19 @@ class MiscNN(object):
                 print('No probability found')
                 return None
 
+    def label_smoothing(self, labels, epsilon=0.1):
+        """
+        We implement the label smoothing
 
+        :param epsilon: variable for smoothing (default 0.1)
+        :param labels:  labels for smoothing (one-hot-encoded)
+        :return:        smoothed labels
+        """
+
+        # determine the dimension of the one hot for u(k)
+        k = tf.cast(tf.shape(labels)[1], dtype=tf.float32)
+
+        # create new labels
+        smoothed_labels = (1.0 - epsilon) * labels + epsilon / k
+
+        return smoothed_labels

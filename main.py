@@ -6,6 +6,7 @@ from NeuralNetHelper.ModelHelper import Model
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
 from NeuralNetHelper.LossHelper import Loss
 from NeuralNetHelper.OptimizerHelper import Optimizer
+from NeuralNetHelper.SaverHelper import Saver
 from KaldiHelper.InferenceHelper import InferenceModel
 
 if __name__ == "__main__":
@@ -42,7 +43,8 @@ if __name__ == "__main__":
 
     with tf.Session() as sess:
         data_feeder = DataFeeder(Settings, sess)
-        train_model = Train(sess, Settings, model, misc, optimizer, loss, data_feeder, placeholders, variables)
+        saver = Saver(Settings, sess)
+        train_model = Train(sess, Settings, model, misc, optimizer, loss, data_feeder, saver, placeholders, variables)
         # train_model.restore_model('model_checkpoint')
 
         if not Settings.inference:
@@ -53,9 +55,9 @@ if __name__ == "__main__":
                 print('Training base network')
                 train_model.train_single_epoch()
 
-                # if i % 10 == 0:
-                #     print('Creating P(s_k|m_j)...')
-                #     train_model.create_p_s_m()
+                if i % 10 == 0:
+                    print('Creating P(s_k|m_j)...')
+                    train_model.create_p_s_m()
 
                 print('Doing Validation...')
                 train_model.do_validation()

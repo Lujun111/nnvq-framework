@@ -18,7 +18,7 @@ class Optimizer(object):
         # create optimizer
         self._set_optimizer()
 
-    def get_train_op(self, global_step, clipping=True, clip_norm=0.25, var_list=None):
+    def get_train_op(self, global_step, clipping=True, clip_norm=0.75, var_list=None):
         """
         Get the train op for the optimizer
 

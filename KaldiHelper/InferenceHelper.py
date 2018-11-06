@@ -215,9 +215,9 @@ class InferenceModel(object):
         # # print(logits)
         # output = self._session.run(logits, feed_dict={"ph_features:0": np_mat, "is_train:0": False})
         # output += 1e-30
-        output_van = self._session.run("vanilla_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
+        # output_van = self._session.run("vanilla_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
         output_vq = self._session.run("base_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
-        output_comb = self._session.run("combination_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
+        # output_comb = self._session.run("combination_network/nn_output:0", feed_dict={"ph_features:0": np_mat, "is_train:0": False, "train_output:0": False})
 
         # print(np.max(output, axis=1))
         # transform data with "continuous trick"
@@ -247,8 +247,8 @@ class InferenceModel(object):
 
         # output = np.log(self.min_max_combination(output_van, output_vq))
         # output -= np.log(self.prior)
-        output = output_comb
-        output += 1e-30
+        output = output_vq
+        # output += 1e-30
         # # flag for setting log-output or normal output
         if self.log_ouput:
             # print(np.min(output))

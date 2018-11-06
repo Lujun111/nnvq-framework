@@ -25,7 +25,7 @@ dim_labels = 1
 
 # Network parameter
 scale_soft = 20.0
-learning_rate_pre = 1e-2
+learning_rate_pre = 1e-5
 learning_rate_post = 1e-3
 exponential_decay = False
 
@@ -36,7 +36,7 @@ vqing = False
 sampling_discrete = False
 # create P(s_k|m_j) from training data
 create_conditioned_prob = False
-identifier = 'vanilla'
+identifier = 'nnvq'
 
 # Inference
 inference = False

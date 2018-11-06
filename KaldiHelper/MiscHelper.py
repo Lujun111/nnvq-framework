@@ -344,6 +344,7 @@ def main(arguments):
     # create object and perform task
     misc = Misc()
     misc.create_tfrecords(args.nj, args.state_based, args.stats, args.in_folder, args.out)
+    print('Created TFRecords')
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
