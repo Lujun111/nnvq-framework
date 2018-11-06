@@ -4,8 +4,6 @@ Basic Speech Recogniton Pipeline:
 
 
 
-| Step |  Event Name  |  Description  |  
+| Step |  Task  |  Toolkit  |  
 |  :--:  |  :--:  |  :--:  |  
-| sort-change | triggers when table's sorting changes | { prop, order } |
-| page-change | triggers when table's page changes | currentPage |
-| select-change | triggers when selection changes | rows |
+| 1 | Raw-Data e.g. TEDLium | kaldi |
