@@ -12,5 +12,8 @@
 
 # Define a new Task
 
-- Change settings in NeuralNetHelper/Settings.py
-    - test
+- Change settings in NeuralNetHelper/Settings.py:
+    - path to data (train/dev/test)
+    - path for tensorboard/checkpoint
+    - apply Hyperparameter
+    - Very important: Define Identifier!
