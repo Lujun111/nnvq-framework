@@ -13,3 +13,4 @@
 # Define a new Task
 
 - Change settings in NeuralNetHelper/Settings.py
+    - test
