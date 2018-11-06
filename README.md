@@ -40,6 +40,6 @@
     added to tensorboard
 
 # TODOs
-1 Rework generate_tf_data.sh script
-2 Add dev/test data creation to generate_tf_data.sh script
-3 Improve Inference
+- Rework generate_tf_data.sh script
+- Add dev/test data creation to generate_tf_data.sh script
+- Improve Inference
