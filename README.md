@@ -9,3 +9,7 @@
 | 5 | Training Acoustic Model | tensorflow |
 | 6 | Decoding | kaldi |
 | 7 | Evaluation | kaldi |
+
+# Define a new Task
+
+- Change settings in NeuralNetHelper/Settings.py
