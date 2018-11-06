@@ -17,3 +17,16 @@
     - path for tensorboard/checkpoint
     - apply Hyperparameter
     - Very important: Define Identifier!
+
+- Change Model in NeuralNetHelper/ModelHelper.py:
+    - create Model
+    - build model by using your predefined Identifier
+
+- Change Loss in NeuralNetHelper/LossHelper.py:
+    - create Loss
+    - select Loss by checking for Identifier
+
+- Change train_dict in NeuralNetHelper/TrainHelper.py:
+    - Add a train_dict for the Identifier
+    - The train_dict is executed during training and returns the result of the 
+    train_op
