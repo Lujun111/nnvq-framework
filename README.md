@@ -30,3 +30,11 @@
     - Add a train_dict for the Identifier
     - The train_dict is executed during training and returns the result of the 
     train_op
+
+- Change Saver in NeuralNetHelper/SaverHelper.py:
+    - Define your metric for saving a better model weights
+    - Use Identifier for this
+
+- Change Summary in NeuralNetHelper/SummaryHelper.py:
+    - Depending on your Identifier add the logging data which should be
+    added to tensorboard
