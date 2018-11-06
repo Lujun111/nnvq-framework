@@ -4,8 +4,8 @@ Basic Speech Recogniton Pipeline:
 
 
 
-|  Event Name  |  Description  |  
-|  :--:  |  :--:  |  
+| Step |  Event Name  |  Description  |  
+|  :--:  |  :--:  |  :--:  |  
 | sort-change | triggers when table's sorting changes | { prop, order } |
 | page-change | triggers when table's page changes | currentPage |
 | select-change | triggers when selection changes | rows |
