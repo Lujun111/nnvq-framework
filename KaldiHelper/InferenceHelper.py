@@ -235,7 +235,7 @@ class InferenceModel(object):
         # if we don't do the "continuous trick" we output discrete labels
         # therefore, we use argmax of the output
         else:
-            output_vq = np.argmax(output, axis=1)
+            output_vq = np.argmax(output_vq, axis=1)
             output_vq = output_vq.astype(np.float64, copy=False)
 
         # print(np.argmax(output_van, axis=1))
@@ -440,17 +440,17 @@ if __name__ == "__main__":
     # set transform_prob=False if you don't want to get a continuous output (default is True)
 
     # flag for model type
-    discrete = False
+    discrete = True
 
     if discrete:
         # discrete model
-        model_discrete = InferenceModel('../model_checkpoint/saved_model-99.meta', '../stats_20k.mat',
+        model_discrete = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',
                                       '../p_s_m.mat', log_output=False, transform_prob=False)
 
-        model_discrete.do_inference(20, '/features/train_20k/feats', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
-                                                                     '/exp/test_400_0/vq_train')
+        model_discrete.do_inference(20, '/home/ga96yar/kaldi/egs/tedlium/s5_r2/features/train_20k/feats', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
+                                                                     '/exp/test_new_400/vq_train')
         model_discrete.do_inference(30, 'test', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
-                                                'exp/test_400_0/vq_test')
+                                                'exp/test_new_400/vq_test')
     else:
         # continuous model
         model_continuous = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',
