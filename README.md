@@ -1,7 +1,7 @@
 # Basic Speech Recogniton Pipeline
 
-| Step |  Task  |  Toolkit  |  
-|  :--:  |  :--:  |  :--:  |  
+| Step |  Task  |  Toolkit  |
+|  :--:  |  :--:  |  :--:  |
 | 1 | Raw-Data e.g. TEDLium | kaldi |
 | 2 | Feature creation (MFCC, PLP, etc.) | kaldi |
 | 3 | Preparing Data for tensorflow | python + tensorflow |
@@ -9,6 +9,11 @@
 | 5 | Training Acoustic Model | tensorflow |
 | 6 | Decoding | kaldi |
 | 7 | Evaluation | kaldi |
+
+
+# Generate train/dev/test data
+'''
+'''
 
 # Define a new Task
 
@@ -40,6 +45,4 @@
     added to tensorboard
 
 # TODOs
-- Rework generate_tf_data.sh script
-- Add dev/test data creation to generate_tf_data.sh script
 - Improve Inference
