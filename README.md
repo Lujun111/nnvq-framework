@@ -17,14 +17,13 @@ is already trained.
 - Install the package *tensorflow*/*tensorflow-gpu* in python
 ## Start process
 - Open the script *scripts/generate_tf_data.sh*
-- Change the following variables in the script:
-    - *kaldi_path*: Set your kaldi root folder of the dataset
-    - *framework_path*: Set your path to the nnvq-framework in here
-    - If you are using a virtual environment for python, change the source folder:
-    ```
-    source ~/folder_to_your_virtual_environment/bin/activate
-    ```
-    otherwise comment out this line
+- *kaldi_path*: Set your kaldi root folder of the dataset
+- *framework_path*: Set your path to the nnvq-framework in here
+- If you are using a virtual environment for python, change the source folder:
+```
+source ~/folder_to_your_virtual_environment/bin/activate
+```
+otherwise comment out this line
 
 # Define a new Task
 
