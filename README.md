@@ -20,9 +20,9 @@ is already trained.
 - *kaldi_path*: Set your kaldi root folder of the dataset
 - *framework_path*: Set your path to the nnvq-framework in here
 - If you are using a virtual environment for python, change the source folder:
-```
-source ~/folder_to_your_virtual_environment/bin/activate
-```
+    ```
+    source ~/folder_to_your_virtual_environment/bin/activate
+    ```
 otherwise comment out this line
 
 # Define a new Task
