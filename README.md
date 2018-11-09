@@ -12,18 +12,19 @@
 
 # Generate train/dev/test data for tensorflow
 ## Prerequisite
-Before you can create the data one must ensure that a basic model (mono/triphone)
+- Before you can create the data one must ensure that a basic model (mono/triphone)
 is already trained.
+- Install the package *tensorflow*/*tensorflow-gpu* in python
 ## Start process
 - Open the script *scripts/generate_tf_data.sh*
 - Change the following variables in the script:
     - *kaldi_path*: Set your kaldi root folder of the dataset
     - *framework_path*: Set your path to the nnvq-framework in here
+    - If you are using a virtual environment for python, change the source folder:
     ```
-    git status
-    git add
-    git commit
+    source ~/folder_to_your_virtual_environment/bin/activate
     ```
+    otherwise comment out this line
 
 # Define a new Task
 
