@@ -15,7 +15,13 @@
 Before you can create the data one must ensure that a basic model (mono/triphone)
 is already trained.
 ## Start process
-- Use the script in *scripts/generate_tf_data.sh*
+- Open the script *scripts/generate_tf_data.sh*
+- Change the following variables in the script:
+    - *kaldi_path*: Set your kaldi root folder of the dataset
+    - *framework_path*: Set your path to the nnvq-framework in here
+    '''
+        test
+    '''
 
 # Define a new Task
 
