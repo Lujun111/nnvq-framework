@@ -19,9 +19,11 @@ is already trained.
 - Change the following variables in the script:
     - *kaldi_path*: Set your kaldi root folder of the dataset
     - *framework_path*: Set your path to the nnvq-framework in here
-    '''
-        test
-    '''
+    ```
+    git status
+    git add
+    git commit
+    ```
 
 # Define a new Task
 
