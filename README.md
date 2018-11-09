@@ -10,6 +10,12 @@
 | 6 | Decoding | kaldi |
 | 7 | Evaluation | kaldi |
 
+# Generate train/dev/test data for tensorflow
+## Prerequisite
+Before you can create the data one must ensure that a basic model (mono/triphone)
+is already trained.
+## generate_tf_data.sh
+
 # Define a new Task
 
 - Change settings in NeuralNetHelper/Settings.py:
@@ -40,6 +46,4 @@
     added to tensorboard
 
 # TODOs
-- Rework generate_tf_data.sh script
-- Add dev/test data creation to generate_tf_data.sh script
 - Improve Inference
