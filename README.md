@@ -24,6 +24,11 @@ is already trained.
     source ~/folder_to_your_virtual_environment/bin/activate
     ```
     otherwise comment out this line
+    
+- start *./generate_tf_data.sh* with arguments, e.g.
+    ```
+    ./generate_tf_data.sh --nj 35 --njd 30 --mono false train_20kshort_nodup exp/tri3 exp/mono output_folder
+    ```
 
 # Define a new Task
 
