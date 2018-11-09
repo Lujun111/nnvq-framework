@@ -22,7 +22,8 @@ is already trained.
 - If you are using a virtual environment for python, change the source folder:
     ```
     source ~/folder_to_your_virtual_environment/bin/activate
-    ```otherwise comment out this line
+    ```
+    otherwise comment out this line
 
 # Define a new Task
 
