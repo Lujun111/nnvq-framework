@@ -14,7 +14,8 @@
 ## Prerequisite
 Before you can create the data one must ensure that a basic model (mono/triphone)
 is already trained.
-## generate_tf_data.sh
+## Start process
+- Use the script in *scripts/generate_tf_data.sh*
 
 # Define a new Task
 
