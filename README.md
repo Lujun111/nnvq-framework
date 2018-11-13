@@ -29,8 +29,20 @@ is already trained.
     ```
     export PYTHONPATH=${PYTHONPATH}:/folder_to_your_nnvq-framework
     ```
-    
-- start *./generate_tf_data.sh* with arguments, e.g.
+
+- Edit the path *KaldiHelper/IteratorHelper.py*, i.e.
+    ```
+    self.path = 'path_to_your_dataset_in_kaldi'
+    ```
+
+- Create splitting of your data with kaldi, e.g.
+    ```
+    utils/subset_data_dir.sh --shortest data/train 20000 data/train_20kshort
+    utils/data/remove_dup_utts.sh 10 data/train_20kshort data/train_20kshort_nodup
+    split_data.sh train_20kshort_nodup 35
+    ```
+
+- Start *./generate_tf_data.sh* with arguments, e.g.
     ```
     ./generate_tf_data.sh --nj 35 --njd 30 --mono false train_20kshort_nodup exp/tri3 exp/mono output_folder
     ```
