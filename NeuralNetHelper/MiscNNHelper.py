@@ -18,14 +18,15 @@ class MiscNN(object):
         self.cb_size = settings.codebook_size
         self.num_labels = settings.num_labels
 
-    def calculate_mi_tf(self, y_nn, labels):
+    def calculate_mi_tf(self, y_nn, labels, nn_output=True):
         """
         Calculate the mutual information between the neural net output and
         the labels (phonemes/states)
 
-        :param y_nn:    output of the neural net
-        :param labels:  phonemes or states of the data (coming from the alignments of kaldi)
-        :return:        mutual information
+        :param y_nn:        output of the neural net
+        :param labels:      phonemes or states of the data (coming from the alignments of kaldi)
+        :param nn_output:   calculate MI with with own labels
+        :return:            mutual information
         """
         alpha = 1.0
         beta = -1.0
@@ -34,7 +35,10 @@ class MiscNN(object):
 
         # take the argmax of y_nn to get the class label determined by the
         # neural network
-        y_labels = tf.argmax(y_nn, axis=1)
+        if nn_output:
+            y_labels = tf.argmax(y_nn, axis=1)
+        else:
+            y_labels = y_nn
         # y_labels = tf.Print(y_labels, [y_labels], summarize=400)
 
         # get p_w, p_y and p_w_y from helper
