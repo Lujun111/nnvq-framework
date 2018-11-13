@@ -24,6 +24,11 @@ is already trained.
     source ~/folder_to_your_virtual_environment/bin/activate
     ```
     otherwise comment out this line
+
+- Add framework folder to python path:
+    ```
+    export PYTHONPATH=${PYTHONPATH}:/folder_to_your_nnvq-framework
+    ```
     
 - start *./generate_tf_data.sh* with arguments, e.g.
     ```

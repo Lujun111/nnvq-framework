@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python import debug as tf_debug
 from NeuralNetHelper.TrainHelper import Train
 from NeuralNetHelper import Settings
 from NeuralNetHelper.MiscNNHelper import MiscNN
@@ -18,8 +19,9 @@ if __name__ == "__main__":
         'ph_labels': tf.placeholder(tf.float32, shape=[None, Settings.dim_labels], name='ph_labels'),
         'ph_lr': tf.placeholder(tf.float32, shape=[], name='learning_rate'),
         'ph_features': tf.placeholder(tf.float32, shape=[None, Settings.dim_features], name='ph_features'),
-        'ph_conditioned_probability': tf.placeholder(tf.float32, shape=None, name='ph_conditioned_probability'),
-        'ph_last_layer': tf.placeholder(tf.bool, name="train_output")
+        'ph_conditioned_probability': tf.placeholder(tf.float32, shape=[Settings.num_labels, Settings.codebook_size],
+                                                     name='ph_conditioned_probability'),
+        'ph_last_layer': tf.placeholder(tf.bool, name="train_output"),
     }
 
     # variables
@@ -27,7 +29,9 @@ if __name__ == "__main__":
         'global_step': tf.Variable(0, trainable=False),
         'nominator': tf.Variable(tf.zeros([Settings.num_labels, Settings.codebook_size]), trainable=False,
                                  dtype=tf.float32),
-        'denominator': tf.Variable(tf.zeros([Settings.codebook_size]), trainable=False, dtype=tf.float32)
+        'denominator': tf.Variable(tf.zeros([Settings.codebook_size]), trainable=False, dtype=tf.float32),
+        'conditioned_probability': tf.Variable(tf.fill([Settings.num_labels, Settings.codebook_size],
+                                                       1.0 / Settings.num_labels), trainable=False, dtype=tf.float32)
     }
 
     # auxiliary functions
@@ -37,11 +41,12 @@ if __name__ == "__main__":
     model = Model(placeholders['ph_train'], placeholders['ph_features'], Settings,
                   ph_output=placeholders['ph_last_layer'])
 
-    loss = Loss(model, placeholders['ph_labels'], Settings)
+    loss = Loss(model, placeholders['ph_labels'], Settings, cond_prob=variables['conditioned_probability'])
 
     optimizer = Optimizer(Settings.learning_rate_pre, loss.loss)
 
     with tf.Session() as sess:
+        # sess = tf_debug.LocalCLIDebugWrapperSession(sess)
         data_feeder = DataFeeder(Settings, sess)
         saver = Saver(Settings, sess)
         train_model = Train(sess, Settings, model, misc, optimizer, loss, data_feeder, saver, placeholders, variables)
@@ -55,9 +60,9 @@ if __name__ == "__main__":
                 print('Training base network')
                 train_model.train_single_epoch()
 
-                if i % 10 == 0:
-                    print('Creating P(s_k|m_j)...')
-                    train_model.create_p_s_m()
+                # if i % 10 == 0:
+                #     print('Creating P(s_k|m_j)...')
+                #     train_model.create_p_s_m()
 
                 print('Doing Validation...')
                 train_model.do_validation()

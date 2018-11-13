@@ -19,7 +19,7 @@ class Saver(object):
                 print('Saving better model...')
                 self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
                 self._current_value = save_dict['accuracy_combination'][0]
-        elif self._settings.identifier == 'nnvq':
+        elif self._settings.identifier in ['nnvq', 'nnvq_tri']:
             if save_dict['mi'][0] > self._current_value:
                 print('Saving better model...')
                 self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')

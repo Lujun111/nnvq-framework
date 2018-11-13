@@ -31,16 +31,83 @@ class Model(object):
         self.scale = None
 
         # create model
-        if self._settings.identifier == 'nnvq':
+        if self._settings.identifier in ['nnvq', 'nnvq_tri']:
             self._build_model_vq()
         elif self._settings.identifier == 'vanilla':
             self._build_model_vanilla()
         elif self._settings.identifier == 'combination':
             self._build_combination()
+            self._input_tensor = self._misc.set_probabilities('model_checkpoint/vq_graph/p_s_m.mat')
         # elif self.settings.identifier == 'restore':
         #     self._build_combination()
 
-        self._input_tensor = self._misc.set_probabilities('model_checkpoint/vq_graph/p_s_m.mat')
+    def _build_model_vq(self):
+        """
+        Build your model for training. All of the architecture
+        is defined here.
+
+        :param scale_softmax: Scaling for the WTA-layer (Winner-Takes-All)
+        :param codebook_size: Size of the codebook
+        """
+
+        # Start here to define your network
+        # ------------------------------------------------------------------
+        num_neurons = 512
+        do_rate = 0.25
+        activation = tf.nn.relu
+
+        with tf.variable_scope('base_network'):
+            fc1 = tf.layers.dense(self.features, num_neurons, activation=activation)
+            # fc1_bn = tf.layers.batch_normalization(fc1, training=self.train, center=False, scale=False)
+            fc1_bn = tf.layers.batch_normalization(fc1, training=self.train)
+            # fc1_dropout = tf.layers.dropout(fc1_bn, rate=do_rate, training=self.train)
+
+            fc2 = tf.layers.dense(fc1_bn, num_neurons, activation=activation)
+            # fc2_bn = tf.layers.batch_normalization(fc2, training=self.train, center=False, scale=False)
+            fc2_bn = tf.layers.batch_normalization(fc2, training=self.train)
+            # fc2_dropout = tf.layers.dropout(fc2_bn, rate=do_rate, training=self.train)
+
+            fc3 = tf.layers.dense(fc2_bn, num_neurons, activation=activation)
+            # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train, center=False, scale=False)
+            fc3_bn = tf.layers.batch_normalization(fc3, training=self.train)
+            # fc3_dropout = tf.layers.dropout(fc3_bn, rate=do_rate, training=self.train)
+            #
+            fc4 = tf.layers.dense(fc3_bn, num_neurons, activation=activation)
+            # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
+            fc4_bn = tf.layers.batch_normalization(fc4, training=self.train)
+            # fc4_dropout = tf.layers.dropout(fc4_bn, rate=do_rate, training=self.train)
+            #
+            # fc5 = tf.layers.dense(fc4_dropout, num_neurons, activation=activation)
+            # # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train, center=False, scale=False)
+            # fc5_bn = tf.layers.batch_normalization(fc5, training=self.train)
+            # fc5_dropout = tf.layers.dropout(fc5_bn, rate=do_rate, training=self.train)
+            # #
+            # fc6 = tf.layers.dense(fc5_dropout, num_neurons, activation=activation)
+            # # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
+            # fc6_bn = tf.layers.batch_normalization(fc6, training=self.train)
+            # fc6_dropout = tf.layers.dropout(fc6_bn, rate=do_rate, training=self.train)
+
+            # # WTA-layer starts here
+            # out = tf.layers.dense(fc4_bn, self._settings.codebook_size, activation=None)
+            # out_scaled = tf.scalar_mul(self._settings.scale_soft, out)
+            # # output without softmax
+            # self.logits = out_scaled
+            # # output with soft, be aware use a name 'nn_output' for the output node!
+            # self.inference = tf.nn.softmax(self.logits, name='nn_output')
+
+            # Low rank matrix factorization
+            # (c.f. LOW-RANK MATRIX FACTORIZATION FOR DEEP NEURAL NETWORK TRAINING WITH
+            # HIGH-DIMENSIONAL OUTPUT TARGETS)
+            out_1 = tf.layers.dense(fc4_bn, 512, activation=None)
+            out = tf.layers.dense(out_1, self._settings.codebook_size, activation=None)
+            out_scaled = tf.scalar_mul(self._settings.scale_soft, out)
+            # output without softmax
+            self.logits = out_scaled
+            # output with soft, be aware use a name 'nn_output' for the output node!
+            self.inference = tf.nn.softmax(self.logits, name='nn_output')
+
+        # ------------------------------------------------------------------
+        # end of definition of network
 
     def _build_model_vq(self):
         """
@@ -96,21 +163,6 @@ class Model(object):
             # output with soft, be aware use a name 'nn_output' for the output node!
             self.inference = tf.nn.softmax(self.logits, name='nn_output')
 
-        # learn the mapping
-        # with tf.variable_scope('added_network'):
-        #     # self.logits_new = tf.layers.dense(self.inference, 127, activation=None, use_bias=False,
-        #     #                                   kernel_constraint=lambda x: tf.clip_by_value(x, 0.01, 1000))
-        #
-        #     self.logits_new = tf.layers.dense(self.inference, 127, activation=None)
-        #     # self.logits_new = tf.Print(self.logits_new, [tf.reduce_min(self.logits_new)])
-        #     self.inference_learned = tf.nn.softmax(self.logits_new, name='nn_output')
-            # self.inference_learned = tf.divide(self.logits_new, tf.reduce_sum(self.logits_new, axis=1, keepdims=True),
-            #                                    name='nn_output')
-            # self.inference_learned = tf.Print(self.inference_learned, [tf.reduce_sum(self.inference_learned)])
-
-        # ------------------------------------------------------------------
-        # end of definition of network
-
     def _build_model_vanilla(self):
         num_neurons = 512
 
@@ -135,7 +187,7 @@ class Model(object):
             fc5_bn = tf.layers.batch_normalization(fc5, training=self.train, center=False, scale=False)
             fc5_dropout = tf.layers.dropout(fc5_bn, rate=0.25, training=self.train)
 
-            self.logits = tf.layers.dense(fc5_dropout, 127, activation=None)
+            self.logits = tf.layers.dense(fc5_dropout, self._settings.num_labels, activation=None)
             # output with soft, be aware use a name 'nn_output' for the output node!
             self.inference = tf.nn.softmax(self.logits, name='nn_output')
 
@@ -187,7 +239,7 @@ class Model(object):
             fc3_van_bn = tf.layers.batch_normalization(fc3_van, training=self.train, center=False, scale=False)
             fc3_van_dropout = tf.layers.dropout(fc3_van_bn, rate=0.25, training=self.train)
 
-            self.logits_vanilla = tf.layers.dense(fc3_van_dropout, 127, activation=None)
+            self.logits_vanilla = tf.layers.dense(fc3_van_dropout, self._settings.num_labels, activation=None)
             # output with soft, be aware use a name 'nn_output' for the output node!
             self.inference_vanilla = tf.nn.softmax(self.logits_vanilla, name='nn_output')
 
@@ -210,7 +262,7 @@ class Model(object):
             #                                               scale=False)
             # out_combi2_dropout = tf.layers.dropout(out_combi2_bn, rate=0.25, training=self.train_output)
 
-            self.logits_combination = tf.layers.dense(out_combi1_dropout, 127, activation=None)
+            self.logits_combination = tf.layers.dense(out_combi1_dropout, self._settings.num_labels, activation=None)
             self.inference_combination = tf.nn.softmax(self.logits_combination, name='nn_output')
             #
             # out_combi1 = tf.layers.dense(tf.concat([out, self.logits_vanilla, self.features], 1),
