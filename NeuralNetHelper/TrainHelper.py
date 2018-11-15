@@ -149,11 +149,11 @@ class Train(object):
         if self._settings.identifier == 'nnvq':
             self._train_dict = {
                 'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
-                # 'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
-                # 'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
-                #                                                 discrete=Settings.sampling_discrete),
-                # 'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
-                #                               self._variables['nominator'], self._variables['denominator']),
+                'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
+                'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
+                                                                discrete=Settings.sampling_discrete),
+                'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
+                                              self._variables['nominator'], self._variables['denominator']),
                 'loss': self._loss.loss,
                 'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'], clip_norm=0.75),
                 'output': self._model.inference,
