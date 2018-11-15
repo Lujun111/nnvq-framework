@@ -163,7 +163,10 @@ class Train(object):
             self._train_dict = {
                 'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
                 'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
-                'cond_prob': self._variables['conditioned_probability'],
+                # 'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
+                #                                                 discrete=Settings.sampling_discrete),
+                'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
+                                              self._variables['nominator'], self._variables['denominator']),
                 'loss': self._loss.loss,
                 'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
                 'output': self._model.inference,
@@ -229,8 +232,9 @@ class Train(object):
                                                            self._placeholders['ph_lr']: Settings.learning_rate_pre,
                                                            self._placeholders['ph_last_layer']: True})
 
+
                 # print(np.max(return_dict['output']))
-                if return_dict['count'] % 100:
+                if return_dict['count'] % 10 == 0:
                     # summary_tmp.value.add(tag='misc/alpha', simple_value=return_dict['alpha'])
                     self._train_writer.add_summary(self._summary.train_logs(return_dict), return_dict['count'])
                     self._train_writer.flush()
@@ -275,8 +279,6 @@ class Train(object):
                 labels_all.append(labs)
 
             except tf.errors.OutOfRangeError:
-
-
                 # reshape data
                 output_all = np.concatenate(output_all)
                 labels_all = np.concatenate(labels_all)
@@ -315,6 +317,7 @@ class Train(object):
                 self._saver.save(return_dict)
                 break
 
+    @show_timing(text='p_s_m', verbosity=2)
     def create_p_s_m(self):
 
         self._feeder.init_train()
@@ -341,9 +344,10 @@ class Train(object):
                     for key, mat in list(save_dict.items()):
                         kaldi_io.write_mat(f, mat, key=key)
 
-                # reset den and nom
+                # reset den and nom, set variable
                 self._session.run([self._misc.reset_variable(self._variables['nominator']),
-                                   self._misc.reset_variable(self._variables['denominator'])])
+                                   self._misc.reset_variable(self._variables['denominator']),
+                                   tf.assign(self._variables['conditioned_probability'], prob)])
 
                 break
 

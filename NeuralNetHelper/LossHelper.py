@@ -47,6 +47,7 @@ class Loss(object):
         elif self._settings.identifier == 'nnvq_tri':
             # cond_prob = self._misc.conditioned_probability(self._model.inference, self._labels,
             #                                                discrete=self._settings.sampling_discrete)
+            # self._cond_prob = tf.Print(self._cond_prob, [self._cond_prob[0, 0]])
 
             smoothed_labels = self._misc.label_smoothing(tf.one_hot(tf.squeeze(self._labels), self._settings.num_labels,
                                                                     axis=1), epsilon=0.1)
@@ -54,7 +55,6 @@ class Loss(object):
                                                       tf.log(tf.tensordot(self._model.inference,
                                                                           tf.transpose(self._cond_prob),
                                                                           axes=1)), reduction_indices=[1]))
-            used_loss = tf.Print(used_loss, [used_loss])
         elif self._settings.identifier == 'combination':
             cond_prob = self._misc.conditioned_probability(self._model.logits, self._labels,
                                                            discrete=self._settings.sampling_discrete)

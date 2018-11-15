@@ -19,6 +19,7 @@ class Summary(object):
             summary_tmp.value.add(tag='train/accuracy',
                                   simple_value=add_dict['accuracy_combination'][0])
         elif self._settings.identifier in ['nnvq', 'nnvq_tri']:
+            # pass
             summary_tmp.value.add(tag='train/mutual_information', simple_value=add_dict['mi'][0])
             summary_tmp.value.add(tag='train/H(w)', simple_value=add_dict['mi'][1])
             summary_tmp.value.add(tag='train/H(y)', simple_value=add_dict['mi'][2])
@@ -51,6 +52,8 @@ class Summary(object):
         elif self._settings.identifier == 'vanilla':
             summary_tmp.value.add(tag='validation/accuracy', simple_value=add_dict['accuracy'][0])
         elif self._settings.identifier == 'nnvq':
+            summary_tmp.value.add(tag='validation/mutual_information', simple_value=add_dict['mi'][0])
+        elif self._settings.identifier == 'nnvq_tri':
             summary_tmp.value.add(tag='validation/mutual_information', simple_value=add_dict['mi'][0])
         elif self._settings.identifier == 'restore':
             summary_tmp.value.add(tag='validation/accuracy', simple_value=add_dict['accuracy_combination'][0])

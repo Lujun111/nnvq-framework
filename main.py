@@ -41,7 +41,7 @@ if __name__ == "__main__":
     model = Model(placeholders['ph_train'], placeholders['ph_features'], Settings,
                   ph_output=placeholders['ph_last_layer'])
 
-    loss = Loss(model, placeholders['ph_labels'], Settings, cond_prob=variables['conditioned_probability'])
+    loss = Loss(model, placeholders['ph_labels'], Settings)
 
     optimizer = Optimizer(Settings.learning_rate_pre, loss.loss)
 
@@ -56,6 +56,8 @@ if __name__ == "__main__":
             print('Training model...')
             for i in range(Settings.epoch_size):
                 print('Epoch ' + str(i))
+
+                # train_model.create_p_s_m()
 
                 print('Training base network')
                 train_model.train_single_epoch()
