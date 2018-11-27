@@ -145,57 +145,57 @@ class Train(object):
 
     def _create_train_dict(self):
         # we create different dicts depending on the task
+        with tf.variable_scope('TrainHelper/create_train_dict'):
 
-        if self._settings.identifier == 'nnvq':
-            self._train_dict = {
-                'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
-                # 'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
-                # 'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
-                #                                                 discrete=Settings.sampling_discrete),
-                # 'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
-                #                               self._variables['nominator'], self._variables['denominator']),
-                'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'], clip_norm=0.75),
-                'output': self._model.inference,
-                'count': self._variables['global_step']}
+            if self._settings.identifier == 'nnvq':
+                self._train_dict = {
+                    'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
+                    # 'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
+                    'cond_prob': self._variables['conditioned_probability'],
+                    # 'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
+                    #                               self._variables['nominator'], self._variables['denominator']),
+                    'loss': self._loss.loss,
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'], clipping=False),
+                    'output': self._model.inference,
+                    'count': self._variables['global_step']}
 
-        elif self._settings.identifier == 'nnvq_tri':
-            self._train_dict = {
-                'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
-                'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
-                # 'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
-                #                                                 discrete=Settings.sampling_discrete),
-                'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
-                                              self._variables['nominator'], self._variables['denominator']),
-                'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
-                'output': self._model.inference,
-                'count': self._variables['global_step']}
+            elif self._settings.identifier == 'nnvq_tri':
+                self._train_dict = {
+                    'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
+                    'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
+                    # 'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
+                    #                                                 discrete=Settings.sampling_discrete),
+                    'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
+                                                  self._variables['nominator'], self._variables['denominator']),
+                    'loss': self._loss.loss,
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
+                    'output': self._model.inference,
+                    'count': self._variables['global_step']}
 
-            # self._variables['conditioned_probability'.ass
+                # self._variables['conditioned_probability'.ass
 
-        elif self._settings.identifier == 'vanilla':
-            self._train_dict = {
-                'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
-                'accuracy': tf.metrics.accuracy(self._placeholders['ph_labels'],
-                                                tf.argmax(self._model.inference, axis=1)),
-                'output': self._model.inference,
-                'count': self._variables['global_step']}
+            elif self._settings.identifier == 'vanilla':
+                self._train_dict = {
+                    'loss': self._loss.loss,
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
+                    'accuracy': tf.metrics.accuracy(self._placeholders['ph_labels'],
+                                                    tf.argmax(self._model.inference, axis=1)),
+                    'output': self._model.inference,
+                    'count': self._variables['global_step']}
 
-        elif self._settings.identifier == 'combination':
-            self._train_dict = {
-                'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._placeholders['ph_labels']),
-                'loss': self._loss.loss,
-                'accuracy_vanilla': tf.metrics.accuracy(self._placeholders['ph_labels'],
-                                                                        tf.argmax(self._model.inference_vanilla, axis=1)),
-                'accuracy_combination': tf.metrics.accuracy(self._placeholders['ph_labels'],
-                                                                        tf.argmax(self._model.inference_combination, axis=1)),
-                'output': self._model.inference_combination,
-                'count': self._variables['global_step'],
-                'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._placeholders['ph_labels'], self._variables['nominator'],
-                                              self._variables['denominator']),
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'])}
+            elif self._settings.identifier == 'combination':
+                self._train_dict = {
+                    'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._placeholders['ph_labels']),
+                    'loss': self._loss.loss,
+                    'accuracy_vanilla': tf.metrics.accuracy(self._placeholders['ph_labels'],
+                                                                            tf.argmax(self._model.inference_vanilla, axis=1)),
+                    'accuracy_combination': tf.metrics.accuracy(self._placeholders['ph_labels'],
+                                                                            tf.argmax(self._model.inference_combination, axis=1)),
+                    'output': self._model.inference_combination,
+                    'count': self._variables['global_step'],
+                    'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._placeholders['ph_labels'], self._variables['nominator'],
+                                                  self._variables['denominator']),
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'])}
 
         self._session.run(tf.local_variables_initializer())
         self._session.run(tf.global_variables_initializer())
@@ -232,8 +232,9 @@ class Train(object):
                                                            self._placeholders['ph_lr']: Settings.learning_rate_pre,
                                                            self._placeholders['ph_last_layer']: True})
 
-
                 # print(np.max(return_dict['output']))
+                # print(np.max(labs))
+                # print(np.sum(return_dict['cond_prob'], axis=0))
                 if return_dict['count'] % 10 == 0:
                     # summary_tmp.value.add(tag='misc/alpha', simple_value=return_dict['alpha'])
                     self._train_writer.add_summary(self._summary.train_logs(return_dict), return_dict['count'])
@@ -275,40 +276,42 @@ class Train(object):
                                               self._placeholders['ph_lr']: Settings.learning_rate_pre,
                                               self._placeholders['ph_last_layer']: False})
 
-                output_all.append(np.argmax(output_nn, axis=1))
+                # output_all.append(np.argmax(output_nn, axis=1))
+                output_all.append(feat)
                 labels_all.append(labs)
 
             except tf.errors.OutOfRangeError:
                 # reshape data
                 output_all = np.concatenate(output_all)
                 labels_all = np.concatenate(labels_all)
-                val_dict = {
-                    'mi': self._misc.calculate_mi_tf(output_all, labels_all, nn_output=False),
-                    'count': self._train_dict['count']
-                }
-                return_dict = self._session.run(val_dict)
+
+                # val_dict = {
+                #     'mi': self._misc.calculate_mi_tf(output_all, labels_all, nn_output=False),
+                #     'count': self._train_dict['count']
+                # }
+                # return_dict = self._session.run(val_dict)
                 #
-                # data_all = list(zip(features_all, labels_all))
-                #
-                # # pick subset to fit onto the gpu
-                # sub_percentage = 0.1
-                # sub_indices = np.random.choice(len(data_all), int(sub_percentage * len(data_all)), replace=False)
-                # sub_data = [data_all[i] for i in sub_indices]
-                #
-                # features_all, labels_all = zip(*sub_data)
-                #
-                # # mi_test = sum_mi / self._count_mi
-                # # mi_vald = self._session.run(self._mutual_information, feed_dict={self._ph_train: False, self._ph_features:
-                # #     features_all, self._ph_labels: labels_all})
-                # sub_dict = dict((k, self._train_dict[k])
-                #                 for k in ('count', 'accuracy_combination', 'mi', 'accuracy')
-                #                 if k in self._train_dict)
-                # return_dict = self._session.run(sub_dict,
-                #                                 feed_dict={self._placeholders['ph_train']: False,
-                #                                            self._placeholders['ph_features']: features_all,
-                #                                            self._placeholders['ph_labels']: labels_all,
-                #                                            self._placeholders['ph_lr']: Settings.learning_rate_pre,
-                #                                            self._placeholders['ph_last_layer']: False})
+                data_all = list(zip(output_all, labels_all))
+
+                # pick subset to fit onto the gpu
+                sub_percentage = 0.25
+                sub_indices = np.random.choice(len(data_all), int(sub_percentage * len(data_all)), replace=False)
+                sub_data = [data_all[i] for i in sub_indices]
+
+                features_all, labels_all = zip(*sub_data)
+
+                # mi_test = sum_mi / self._count_mi
+                # mi_vald = self._session.run(self._mutual_information, feed_dict={self._ph_train: False, self._ph_features:
+                #     features_all, self._ph_labels: labels_all})
+                sub_dict = dict((k, self._train_dict[k])
+                                for k in ('count', 'accuracy_combination', 'mi', 'accuracy')
+                                if k in self._train_dict)
+                return_dict = self._session.run(sub_dict,
+                                                feed_dict={self._placeholders['ph_train']: False,
+                                                           self._placeholders['ph_features']: features_all,
+                                                           self._placeholders['ph_labels']: labels_all,
+                                                           self._placeholders['ph_lr']: Settings.learning_rate_pre,
+                                                           self._placeholders['ph_last_layer']: False})
 
                 self._train_writer.add_summary(self._summary.validation_logs(return_dict), return_dict['count'])
                 self._train_writer.flush()

@@ -2,6 +2,7 @@
 # coding: utf-8
 import tensorflow as tf
 import os
+import collections
 import pandas as pd
 import re
 import numpy as np
@@ -18,7 +19,7 @@ class InferenceModel(object):
     """
         TrainedModel for performing the inference after training
     """
-    def __init__(self, meta_file, stats_file, cond_prob_file, transform_prob=True, log_output=True):
+    def __init__(self, meta_file, stats_file, cond_prob_file, transform_prob=True, log_output=True, splice=False):
         """
         :param meta_file:       path to meta file (has to be created during training)
         :param stats_file:      path to stats file for normalization (kaldi-format)
@@ -41,6 +42,7 @@ class InferenceModel(object):
         self._meta_file = None
         self._checkpoint_folder = None
         self._dev_alignments = {}
+        self._splice = slice
 
         # execute some init methods
         # self._get_checkpoint_data(meta_file)
@@ -66,7 +68,12 @@ class InferenceModel(object):
         """
 
         # create DataIterator for iterate through the split folder created by kaldi
-        dataset = DataIterator(nj, input_folder)
+        dataset = DataIterator(nj, self._splice, input_folder)
+
+        if self._splice:
+            dim = 117
+        else:
+            dim = 39
 
         # number iterator for counting, necessary for writing the matrices later
         iterator = iter([i for i in range(1, dataset.get_size() + 1)])
@@ -83,18 +90,20 @@ class InferenceModel(object):
                 print(data_path)
                 # iterate through data
                 for key, mat in kaldi_io.read_mat_ark(data_path):
-                    inferenced_data[key] = self._do_single_inference(mat[:, :39])  # do inference for one batch
-                    tmp = self._do_single_inference(mat[:, :39])
+                    inferenced_data[key] = self._do_single_inference(mat[:, :dim])  # do inference for one batch
+                    tmp = self._do_single_inference(mat[:, :dim])
                     # check_data[key] = [np.argmax(tmp[0], axis=1), np.argmax(tmp[1], axis=1),
                     #                    np.argmax(tmp[2], axis=1), self._dev_alignments[key]]
-                    if np.shape(mat)[1] > 39:   # get statistics for mi (only if we input data + labels), for debugging
-                        phoneme_all[key] = mat[:, 39]
+                    if np.shape(mat)[1] > dim:   # get statistics for mi (only if we input data + labels), for debugging
+                        phoneme_all[key] = mat[:, dim]
                     # add for debugging, see below
                     output_all[key] = tmp
 
+                od = collections.OrderedDict(sorted(inferenced_data.items()))
+
                 # write posteriors (inferenced data) to files
                 with open(output_folder + '/feats_vq_' + str(next(iterator)), 'wb') as f:
-                    for key, mat in list(inferenced_data.items()):
+                    for key, mat in list(od.items()):
                         if self.transform:
                             kaldi_io.write_mat(f, mat, key=key)
                         else:
@@ -297,7 +306,7 @@ class InferenceModel(object):
         """
         self._session = tf.Session(graph=self._graph)
         # self._session.run(tf.global_variables_initializer())
-        self._session1 = tf.Session(graph=self._graph1)
+        # self._session1 = tf.Session(graph=self._graph1)
         # self._session1.run(tf.global_variables_initializer())
 
     def _create_graph(self, meta_file, identifier=None):
@@ -444,13 +453,12 @@ if __name__ == "__main__":
 
     if discrete:
         # discrete model
-        model_discrete = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',
-                                      '../p_s_m.mat', log_output=False, transform_prob=False)
+        model_discrete = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k_splice.mat',
+                                      '../p_s_m.mat', log_output=False, transform_prob=False, splice=True)
 
-        model_discrete.do_inference(20, '/home/ga96yar/kaldi/egs/tedlium/s5_r2/features/train_20k/feats', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
-                                                                     '/exp/test_new_400/vq_train')
-        model_discrete.do_inference(30, 'test', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
-                                                'exp/test_new_400/vq_test')
+        model_discrete.do_inference(35, 'train', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
+                                                                     '/exp/nnvq_400_splice_ali/vq_train')
+        model_discrete.do_inference(30, 'test', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/exp/nnvq_400_splice_ali/vq_test')
     else:
         # continuous model
         model_continuous = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',

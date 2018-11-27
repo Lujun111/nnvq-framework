@@ -52,7 +52,7 @@ class Model(object):
 
         # Start here to define your network
         # ------------------------------------------------------------------
-        num_neurons = 1024
+        num_neurons = 512
         do_rate = 0.25
         activation = tf.nn.relu
 

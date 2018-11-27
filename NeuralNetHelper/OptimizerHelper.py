@@ -28,20 +28,22 @@ class Optimizer(object):
         :param var_list:        list of weights which should be optimized
         :return:                train op
         """
-        with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
-            if clipping:
-                gradients, variables = zip(*self._optimizer.compute_gradients(self._loss, var_list=var_list))
-                gradients, _ = tf.clip_by_global_norm(gradients, clip_norm)
-                return self._optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
-            else:
-                gradients = self._optimizer.compute_gradients(self._loss, var_list=var_list)
-                return self._optimizer.apply_gradients(gradients, global_step=global_step)
+        with tf.variable_scope('OptimizerHelper/get_train_op'):
+            with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+                if clipping:
+                    gradients, variables = zip(*self._optimizer.compute_gradients(self._loss, var_list=var_list))
+                    gradients, _ = tf.clip_by_global_norm(gradients, clip_norm)
+                    return self._optimizer.apply_gradients(zip(gradients, variables), global_step=global_step)
+                else:
+                    gradients = self._optimizer.compute_gradients(self._loss, var_list=var_list)
+                    return self._optimizer.apply_gradients(gradients, global_step=global_step)
 
     def _set_optimizer(self):
-        if self._opt_name == 'ADAM':
-            self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate)
-        else:
-            # TODO add other optimizer
-            raise NotImplementedError('Not implemented')
+        with tf.variable_scope('OptimizerHelper/set_optimizer'):
+            if self._opt_name == 'ADAM':
+                self._optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate)
+            else:
+                # TODO add other optimizer
+                raise NotImplementedError('Not implemented')
 
 

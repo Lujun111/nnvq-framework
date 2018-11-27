@@ -208,7 +208,7 @@ class Misc(object):
         """
         return (data_array - self.global_mean) / self.global_var
 
-    def _convert_npy_to_tfrecords(self, transformation, npy_array, path_tfrecords):
+    def _convert_npy_to_tfrecords(self, transformation, splice, npy_array, path_tfrecords):
         """
         Auxiliary function for the actual creation of the TFRecord files
 
@@ -217,13 +217,21 @@ class Misc(object):
         :param path_tfrecords:      path to save the TFRecord files
         :return:
         """
+
+        # set dim for splice
+        # TODO could be solved in a better way
+        if splice:
+            dim = 117
+        else:
+            dim = 39
+
         with tf.python_io.TFRecordWriter(path_tfrecords) as tf_writer:
             for row in npy_array:
                 # print(row[:39])
                 if transformation:
-                    features, label = self._normalize_data(row[:39]), np.expand_dims(row[39], 1)
+                    features, label = self._normalize_data(row[:dim]), np.expand_dims(row[dim], 1)
                 else:
-                    features, label = self._normalize_data(row[:39]), self.trans_vec_to_phones(np.expand_dims(row[39], 1))
+                    features, label = self._normalize_data(row[:dim]), self.trans_vec_to_phones(np.expand_dims(row[dim], 1))
                 if np.nan in label:
                     print('Error, check for nan!')
                 # print(features)
@@ -232,13 +240,14 @@ class Misc(object):
                     'y': tf.train.Feature(float_list=tf.train.FloatList(value=label.flatten()))}))
                 tf_writer.write(example.SerializeToString())
 
-    def create_tfrecords(self, nj, trans_phoneme, stats, path_input, path_output):
+    def create_tfrecords(self, nj, trans_phoneme, splice, stats, path_input, path_output):
         # TODO refactor to KaldiMiscHelper ???
         """
         Create the TFRecord files
 
         :param nj: number of jobs split into in data folder
         :param trans_phoneme: transform to single phoneme (41) or multi (166)
+        :param splice: splice feats (1 left and 1 right context)
         :param stats: stats-file to normalize data
         :param path_input: path to the folder where the features + phonemes are
         :param path_output: output path to save the tfrecords
@@ -258,7 +267,7 @@ class Misc(object):
             else:
                 print('No mean or var set!!!')
 
-        dataset = DataIterator(nj, path_input)
+        dataset = DataIterator(nj, splice, path_input)
 
         tmp_df = pd.DataFrame()
         count = 1
@@ -267,7 +276,7 @@ class Misc(object):
                 for _, mat in kaldi_io.read_mat_ark(dataset.next_file()):
                     tmp_df = pd.concat([tmp_df, pd.DataFrame(mat)])
 
-                self._convert_npy_to_tfrecords(trans_phoneme, tmp_df.values, path_output + '/data_' + str(count) + '.tfrecords')
+                self._convert_npy_to_tfrecords(trans_phoneme, splice, tmp_df.values, path_output + '/data_' + str(count) + '.tfrecords')
                 print('/data_' + str(count) + '.tfrecords created')
 
                 count += 1
@@ -334,6 +343,8 @@ def main(arguments):
     parser.add_argument('in_folder', type=str, help='alignment folder which contains the labels of the data')
     # define the output folder where to save the TFRecords files
     parser.add_argument('out', type=str, help='output folder to save the concat data')
+    # define splice-feats or not
+    parser.add_argument('--splice', type=str2bool, help='flag for spliced features', default=False)
     # parse all arguments to parser
     args = parser.parse_args(arguments)
 
@@ -343,7 +354,7 @@ def main(arguments):
 
     # create object and perform task
     misc = Misc()
-    misc.create_tfrecords(args.nj, args.state_based, args.stats, args.in_folder, args.out)
+    misc.create_tfrecords(args.nj, args.state_based, args.splice, args.stats, args.in_folder, args.out)
     print('Created TFRecords')
 
 if __name__ == "__main__":

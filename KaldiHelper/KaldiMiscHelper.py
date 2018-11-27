@@ -57,12 +57,19 @@ class KaldiMiscHelper(object):
             except StopIteration:
                 break
 
-    def concat_data(self, nj, path_data, path_phonemes, output_folder):
-        dataset = DataIterator(nj, path_data)
+    def concat_data(self, nj, splice, path_data, path_phonemes, output_folder):
+        dataset = DataIterator(nj, splice, path_data)
 
         create_stats = True
-        if ('test' or 'dev') in path_data:
+        if path_data in ['test', 'dev']:
             create_stats = False
+
+        # set dim for splice
+        # TODO could be solved in a better way
+        if splice:
+            dim = 117
+        else:
+            dim = 39
 
         print('Loading alignment dict')
         alignment_dict = {}
@@ -96,7 +103,7 @@ class KaldiMiscHelper(object):
                 # write the filtered training data
                 with open(output_folder + '/features_' + str(count), 'wb') as f:
                     for key, mat in list(od.items()):
-                        kaldi_io.write_mat(f, mat.values.astype(np.float32, copy=False)[:, :39], key=key)
+                        kaldi_io.write_mat(f, mat.values.astype(np.float32, copy=False)[:, :dim], key=key)
                 tmp_dict = {}
                 count += 1
 
@@ -105,6 +112,20 @@ class KaldiMiscHelper(object):
                     print('Saving std and mean of data to stats.mat')
                     self._create_and_save_stats(np.concatenate(gather_data))
                 break
+
+
+def str2bool(v):
+    """
+    Converts string argument to bool
+    :param v:
+    :return:
+    """
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 def main(arguments):
@@ -121,6 +142,8 @@ def main(arguments):
     parser.add_argument('ali', type=str, help='alignment folder which contains the labels of the data')
     # define the output folder where to save the concat data
     parser.add_argument('out', type=str, help='output folder to save the concat data')
+    # define splice-feats or not
+    parser.add_argument('--splice', type=str2bool, help='flag for spliced features', default=False)
     # parse all arguments to parser
     args = parser.parse_args(arguments)
 
@@ -130,7 +153,7 @@ def main(arguments):
 
     # create object and perform task
     kaldi_misc_helper = KaldiMiscHelper()
-    kaldi_misc_helper.concat_data(args.nj, args.data, args.ali, args.out)
+    kaldi_misc_helper.concat_data(args.nj, args.splice, args.data, args.ali, args.out)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))

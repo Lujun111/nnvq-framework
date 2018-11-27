@@ -10,7 +10,7 @@ class DataIterator(object):
     ATTENTION: The DataIterator only handles the path (string) to the split folders
     and does not actually load any data!!!
     """
-    def __init__(self, nj, folder):
+    def __init__(self, nj, splice, folder):
         """
         Init DataIterator
 
@@ -20,6 +20,7 @@ class DataIterator(object):
         # TODO self.path is hard coded
         self.path = '/home/ga96yar/kaldi/egs/tedlium/s5_r2'
         self._nj = nj
+        self._splice = splice
         self._folder = folder
         self._generator = None
 
@@ -41,9 +42,15 @@ class DataIterator(object):
 
         if ('/' or '..') not in self._folder:
             assert (os.path.isdir(self.path + '/data/' + self._folder))
-            self._generator = ('add-deltas scp:' + self.path + '/data/' + self._folder + '/split' + str(self._nj) + '/' + str(i) +
-                               '/feats.scp ark:-|' for i in range(1, self._nj + 1))
+            if self._splice:
+                self._generator = ('splice-feats --left-context=1 --right-context=1 scp:' + self.path + '/data/'
+                                   + self._folder + '/split' + str(self._nj) + '/' + str(i) +
+                                   '/feats.scp ark:-| add-deltas ark:- ark:-|' for i in range(1, self._nj + 1))
+            else:
+                self._generator = ('add-deltas scp:' + self.path + '/data/' + self._folder + '/split' + str(self._nj) + '/' + str(i) +
+                                   '/feats.scp ark:-|' for i in range(1, self._nj + 1))
         else:
+            # TODO no implementation of splice-feats for own folders
             path_generator = [self._folder + '/' + s for s in os.listdir(self._folder)]
             # sort list for later processing
             convert = lambda text: int(text) if text.isdigit() else text
