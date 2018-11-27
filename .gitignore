@@ -2,6 +2,7 @@
 data
 model_checkpoint
 tensorboard
+old_tensorboard
 meta_data
 tf_data
 tmp
