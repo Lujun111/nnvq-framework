@@ -8,9 +8,9 @@ Setting file to define global variables
 # path_train = 'tf_data/train_20k_state'
 # path_test = 'tf_data/test'
 # path_dev = 'tf_data/dev'
-path_train = 'tf_data/train_pdf_20k_splice'
-path_test = 'tf_data/test_pdf_20k_splice'
-path_dev = 'tf_data/dev_pdf_20k_splice'
+path_train = 'tf_data/train_pdf_20k_splice_5f'
+path_test = 'tf_data/test_pdf_20k_splice_5f'
+path_dev = 'tf_data/dev_pdf_20k_splice_5f'
 
 path_tensorboard = 'tensorboard'
 path_checkpoint = 'model_checkpoint'
@@ -23,11 +23,11 @@ delta = 0.001   # delta for P(s_k|m_j) 0.001
 codebook_size = 400   # 13000
 batch_size = 10000
 epoch_size = 101
-dim_features = 117
+dim_features = 195  # 39 (1f)   # 117 (3f)  # 195 (5f)
 dim_labels = 1
 
 # Network parameter
-scale_soft = 10.0
+scale_soft = 15.0
 learning_rate_pre = 1e-2
 learning_rate_post = 1e-3
 exponential_decay = False

@@ -19,7 +19,7 @@ cmd=run.pl
 stage=-5
 state_based=true
 mono=false  # TODO rename
-splice_feats=false
+splice_feats=0
 
 #
 string=
@@ -37,11 +37,11 @@ if [ $# != 4 ]; then
   echo "main options (for others, see top of script file)"
   echo "  --config <config-file>                           # config containing options"
   echo "  --nj <nj>                                        # number of parallel jobs for train data"
-  echo "  --njd <njd>                                        # number of parallel jobs for dev/test data"
+  echo "  --njd <njd>                                      # number of parallel jobs for dev/test data"
   echo "  --cmd (utils/run.pl|utils/queue.pl <queue opts>) # how to run jobs."
   echo "  --state-based <true/false>                       # state-base or phoneme labels"
   echo "  --mono <true/false>                              # create monophone labels or triphone labels"
-  echo "  --splice-feats <true/false>                      # splice feats"
+  echo "  --splice-feats <num>                             # splice feats with context, dafault single frame"
   exit 1;
 fi
 
@@ -152,7 +152,6 @@ if [ $stage -le -1 ]; then
             rm $working_dir/tmp_${dataset}/features_* 2>/dev/null
         fi
         # attention: we delete the filtered features_ without backing them up
-
     done
 fi
 
@@ -172,7 +171,7 @@ fi
 
 # Cleaning up some files which are not necessary anymore
 echo "---Cleaning up---"
-# rm $working_dir/ali_*
-# rm -R $working_dir/alignments $working_dir/tmp_*
+rm $working_dir/ali_*
+rm -R $working_dir/alignments $working_dir/tmp_*
 
 exit 0

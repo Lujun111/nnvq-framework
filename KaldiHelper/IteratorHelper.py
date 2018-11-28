@@ -1,3 +1,4 @@
+#!/home/ga96yar/tensorflow_py3/bin/python
 import os
 import re
 
@@ -42,13 +43,14 @@ class DataIterator(object):
 
         if ('/' or '..') not in self._folder:
             assert (os.path.isdir(self.path + '/data/' + self._folder))
-            if self._splice:
-                self._generator = ('splice-feats --left-context=1 --right-context=1 scp:' + self.path + '/data/'
-                                   + self._folder + '/split' + str(self._nj) + '/' + str(i) +
+            if self._splice > 0:
+                self._generator = ('splice-feats --left-context=' + str(self._splice) + ' --right-context=' +
+                                   str(self._splice) + ' scp:' + self.path + '/data/' + self._folder +
+                                   '/split' + str(self._nj) + '/' + str(i) +
                                    '/feats.scp ark:-| add-deltas ark:- ark:-|' for i in range(1, self._nj + 1))
             else:
-                self._generator = ('add-deltas scp:' + self.path + '/data/' + self._folder + '/split' + str(self._nj) + '/' + str(i) +
-                                   '/feats.scp ark:-|' for i in range(1, self._nj + 1))
+                self._generator = ('add-deltas scp:' + self.path + '/data/' + self._folder + '/split' +
+                                   str(self._nj) + '/' + str(i) + '/feats.scp ark:-|' for i in range(1, self._nj + 1))
         else:
             # TODO no implementation of splice-feats for own folders
             path_generator = [self._folder + '/' + s for s in os.listdir(self._folder)]

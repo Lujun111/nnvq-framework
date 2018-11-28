@@ -1,3 +1,4 @@
+#!/home/ga96yar/tensorflow_py3/bin/python
 import pandas as pd
 import collections
 import sys
@@ -9,8 +10,11 @@ from KaldiHelper.MiscHelper import Misc
 
 
 class KaldiMiscHelper(object):
-    def __init__(self):
-        pass
+    def __init__(self, nj, splice, dim=39):
+        # TODO can we determine the dim on the fly?
+        self._nj = nj
+        self._splice = splice
+        self._dim = dim
 
     def _create_and_save_stats(self, mat):
         tmp_mean = np.mean(mat, axis=0)
@@ -29,9 +33,8 @@ class KaldiMiscHelper(object):
         assert type(path_data) == str and type(path_phonemes) == str
 
         # create Iterators
-        dataset = DataIterator(nj, path_data)
+        dataset = DataIterator(self._nj, self._splice, path_data)
         phonemes = AlignmentIterator(nj, path_phonemes)
-        misc = Misc()
 
         # iterate through data
         count = 1
@@ -57,19 +60,15 @@ class KaldiMiscHelper(object):
             except StopIteration:
                 break
 
-    def concat_data(self, nj, splice, path_data, path_phonemes, output_folder):
-        dataset = DataIterator(nj, splice, path_data)
+    def concat_data(self, path_data, path_phonemes, output_folder):
+        dataset = DataIterator(self._nj, self._splice, path_data)
 
         create_stats = True
         if path_data in ['test', 'dev']:
             create_stats = False
 
-        # set dim for splice
-        # TODO could be solved in a better way
-        if splice:
-            dim = 117
-        else:
-            dim = 39
+        # set dim
+        dim = self._dim * (2 * self._splice + 1)
 
         print('Loading alignment dict')
         alignment_dict = {}
@@ -143,7 +142,8 @@ def main(arguments):
     # define the output folder where to save the concat data
     parser.add_argument('out', type=str, help='output folder to save the concat data')
     # define splice-feats or not
-    parser.add_argument('--splice', type=str2bool, help='flag for spliced features', default=False)
+    parser.add_argument('--splice', type=int, help='flag for spliced features with context width',
+                        default=0)
     # parse all arguments to parser
     args = parser.parse_args(arguments)
 
@@ -152,8 +152,8 @@ def main(arguments):
         print("Argument {:14}: {}".format(arg, getattr(args, arg)))
 
     # create object and perform task
-    kaldi_misc_helper = KaldiMiscHelper()
-    kaldi_misc_helper.concat_data(args.nj, args.splice, args.data, args.ali, args.out)
+    kaldi_misc_helper = KaldiMiscHelper(args.nj, args.splice)
+    kaldi_misc_helper.concat_data(args.data, args.ali, args.out)
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
