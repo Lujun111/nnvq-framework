@@ -160,7 +160,7 @@ class MiscNN(object):
         """
         with tf.variable_scope('MiscNNHelper/conditioned_probability'):
             # small delta for smoothing P(s_k|m_j), necessary if we log the probability
-            eps = tf.constant(0.5e-2)  # 1e-2 (mono) 1e-4 (tri)
+            eps = tf.constant(1e-2)  # 1e-2 (mono) 1e-4 (tri)
 
             # cast labels into int32
             labels = tf.cast(labels, dtype=tf.int32)  # cast to int and put them in [[alignments]]
