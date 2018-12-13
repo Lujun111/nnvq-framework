@@ -47,7 +47,7 @@ class MiscNN(object):
             # y_labels = tf.Print(y_labels, [y_labels], summarize=400)
 
             # get p_w, p_y and p_w_y from helper
-            p_w, p_y, p_w_y = self._helper_mi_tf(y_labels, labels)
+            p_w, p_y, p_w_y = self.helper_mi_tf(y_labels, labels)
 
             # H(Y) on log2 base
             h_y = tf.multiply(p_y, tf.log(tf.clip_by_value(p_y, 1e-8, 1e6)) / tf.log(2.0))
@@ -65,7 +65,7 @@ class MiscNN(object):
 
             return -h_w + h_w_y, -h_w, -h_y, -h_w_y
 
-    def _helper_mi_tf(self, y_labels, labels):
+    def helper_mi_tf(self, y_labels, labels):
         """
         Create P(w), P(y) and P(w|y) using the output labels of the neural network
         For deeper understanding how we create these probability, please check the
@@ -114,7 +114,39 @@ class MiscNN(object):
 
             return pwtmp, pytmp, pw_y_tmp
 
-    def conditioned_probability(self, y_nn, labels, discrete=False):
+    def create_stats_val(self, y_labels, labels):
+
+        with tf.variable_scope('MiscNNHelper/create_stats_val'):
+            labels = tf.cast(labels, dtype=tf.int32)
+            # define tf variables to use scatter_nd and scatter_nd_add
+            # pwtmp = tf.Variable(tf.zeros(self.num_labels), trainable=False, dtype=tf.float32)
+            # pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
+            # pw_y_tmp = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
+            pwtmp = tf.get_default_graph().get_tensor_by_name('p_w:0')
+            pytmp = tf.get_default_graph().get_tensor_by_name('p_y:0')
+            pw_y_tmp = tf.get_default_graph().get_tensor_by_name('p_w_y:0')
+
+            # self.reset_p_w
+
+
+            # create P(w)
+            pwtmp = tf.assign(pwtmp, tf.zeros([self.num_labels]))  # reset Variable/floor
+            # pwtmp = self.reset_variable(pwtmp)
+            pwtmp = tf.scatter_add(pwtmp, labels, tf.ones(tf.shape(labels)))
+
+            # create P(y)
+            pytmp = tf.assign(pytmp, tf.zeros([self.cb_size]))  # reset Variable/floor
+            pytmp = tf.scatter_add(pytmp, y_labels, tf.ones(tf.shape(y_labels)))
+
+            # create P(w|y)
+            pw_y_tmp = tf.assign(pw_y_tmp, tf.zeros([self.num_labels, self.cb_size]))  # reset Variable/floor
+            pw_y_tmp = tf.scatter_nd_add(pw_y_tmp,
+                                         tf.concat([tf.cast(labels, dtype=tf.int64), tf.expand_dims(y_labels, 1)],
+                                                   axis=1), tf.ones(tf.shape(y_labels)))
+
+            return pwtmp, pytmp, pw_y_tmp
+
+    def conditioned_probability(self, y_nn, labels, discrete=False, conditioned='m_j'):
         """
         Create the conditioned probability P(s_k|m_j) using the output of the neural network
         and the target labels coming out of kaldi
@@ -123,11 +155,12 @@ class MiscNN(object):
         :param labels:      phonemes or states of the data (coming from the alignments of kaldi)
         :param discrete:    flag for creating P(s_k|m_j) in the discrete way (check dissertation
                             of Neukirchen, p.62 (5.51))
+        :param conditioned: condition on 'm_j' or 'y_k'
         :return:            return P(s_k|m_j)
         """
         with tf.variable_scope('MiscNNHelper/conditioned_probability'):
             # small delta for smoothing P(s_k|m_j), necessary if we log the probability
-            eps = tf.constant(1e-2)  # 1e-2 (mono) 1e-4 (tri)
+            eps = tf.constant(0.5e-2)  # 1e-2 (mono) 1e-4 (tri)
 
             # cast labels into int32
             labels = tf.cast(labels, dtype=tf.int32)  # cast to int and put them in [[alignments]]
@@ -151,22 +184,50 @@ class MiscNN(object):
                 # get denominator
                 tf.scatter_add(denominator, output_dis, tf.ones(tf.shape(output_dis)[0]))
 
-                # create P(s_k|m_j) in the discrete way
-                conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+                if conditioned == 'y_k':
+                    # create P(m_j|y_k) in the discrete way
+                    conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+                elif conditioned == 'm_j':
+                    # create P(y_k|m_j) in the discrete way
+                    conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+                else:
+                    raise NotImplementedError
 
             else:
                 # get nominator
                 nominator = tf.scatter_nd_add(nominator, labels, y_nn)
                 # nominator = tf.Print(nominator, [nominator[1, 1]])
 
-                # get denominator
-                denominator = tf.reduce_sum(y_nn, axis=0)
-
-                # smoothing the probability
-                denominator += self.num_labels * eps
-
-                # create P(s_k|m_j) in the continuous way
-                conditioned_prob = tf.divide(nominator, denominator)
+                if conditioned == 'y_k':
+                    # get denominator
+                    denominator = tf.reduce_sum(y_nn, axis=1)
+                    # smoothing the probability
+                    denominator += self.num_labels * eps
+                    # create P(m_j|y_k) in the discrete way
+                    # conditioned_prob = tf.divide(nominator, denominator)
+                    conditioned_prob = tf.div(nominator, tf.reduce_sum(nominator, axis=1, keepdims=True))
+                elif conditioned == 'm_j':
+                    # get denominator
+                    denominator = tf.reduce_sum(y_nn, axis=0)
+                    # smoothing the probability
+                    denominator += self.num_labels * eps
+                    # create P(y_k|m_j) in the discrete way
+                    # conditioned_prob = tf.divide(nominator, denominator)
+                    conditioned_prob = tf.div(nominator, tf.reduce_sum(nominator, axis=0, keepdims=True))
+                else:
+                    raise NotImplementedError
+                #
+                # # create P(s_k|m_j) in the continuous way
+                # conditioned_prob = tf.divide(nominator, denominator)
+            # nominator = tf.scatter_nd_add(nominator, labels, y_nn)
+            # nominator += eps
+            # conditioned_prob = tf.div(nominator, tf.reduce_sum(nominator, axis=1, keepdims=True))
+            # nominator += eps
+            # denominator = tf.reduce_sum(y_nn, axis=1)
+            # # smoothing the probability
+            # denominator += self.num_labels * eps
+            # create P(m_j|y_k) in the discrete way
+            # conditioned_prob = tf.divide(nominator, denominator)
 
             return conditioned_prob
 

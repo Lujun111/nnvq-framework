@@ -11,7 +11,7 @@ class DataIterator(object):
     ATTENTION: The DataIterator only handles the path (string) to the split folders
     and does not actually load any data!!!
     """
-    def __init__(self, nj, splice, folder):
+    def __init__(self, nj, splice, cmvn, folder):
         """
         Init DataIterator
 
@@ -19,11 +19,13 @@ class DataIterator(object):
         :param folder:  path to data
         """
         # TODO self.path is hard coded
+        # TODO cmvn
         self.path = '/home/ga96yar/kaldi/egs/tedlium/s5_r2'
         self._nj = nj
         self._splice = splice
         self._folder = folder
         self._generator = None
+        self._cmvn = cmvn
 
         # create iterator for iterating through data
         self._create_iterator()
@@ -41,18 +43,53 @@ class DataIterator(object):
         """
         assert type(self._nj) == int and type(self._folder) == str
 
+        base_str = 'copy-matrix scp:' + self.path + '/data/' + self._folder + '/split' + str(self._nj) + '/' + '{i}' + \
+            '/feats.scp ark:-|'
+        add_deltas_str = 'add-deltas ark:- ark:-|'
+
         if ('/' or '..') not in self._folder:
             assert (os.path.isdir(self.path + '/data/' + self._folder))
+            # create splice string
             if self._splice > 0:
-                self._generator = ('splice-feats --left-context=' + str(self._splice) + ' --right-context=' +
-                                   str(self._splice) + ' scp:' + self.path + '/data/' + self._folder +
-                                   '/split' + str(self._nj) + '/' + str(i) +
-                                   '/feats.scp ark:-| add-deltas ark:- ark:-|' for i in range(1, self._nj + 1))
+                splice_str = 'splice-feats --left-context=' + str(self._splice) + ' --right-context=' + \
+                             str(self._splice) + ' ark:- ark:-|'
             else:
-                self._generator = ('add-deltas scp:' + self.path + '/data/' + self._folder + '/split' +
-                                   str(self._nj) + '/' + str(i) + '/feats.scp ark:-|' for i in range(1, self._nj + 1))
+                splice_str = ''
+
+            # create cmvn string
+            if self._cmvn:
+                cmvn_str = 'apply-cmvn --norm-vars=false --utt2spk=ark:' + self.path + '/data/' + self._folder + \
+                           '/split' + str(self._nj) + '/' + '{i}' + '/utt2spk scp:' + \
+                           self.path + '/data/' + self._folder + '/split' + str(self._nj) + '/' + '{i}' + \
+                           '/cmvn.scp ark:- ark:- |'
+                # + self.path + '/data/' + self._folder + \
+                # '/split' + str(self._nj) + '/' + '{i}' + '/feats.scp
+
+            else:
+                cmvn_str = ''
+
+            self._generator = ((base_str + cmvn_str + splice_str + add_deltas_str).format(i=i)
+                               for i in range(1, self._nj + 1))
+
+            # TODO cleanup
+            # self._generator = ('apply-cmvn --norm-vars=true --utt2spk=ark:' + self.path + '/data/' +
+            #                    self._folder + '/split' + str(self._nj) + '/' + str(i) + '/utt2spk scp:' +
+            #                    self.path + '/data/' + self._folder + '/split' + str(self._nj) + '/' + str(i) +
+            #                    '/cmvn.scp scp:' + self.path + '/data/' + self._folder +
+            #                    '/split' + str(self._nj) + '/' + str(i) + '/feats.scp ark:- |'' \
+            #                    ''splice-feats --left-context=' + str(self._splice) + ' --right-context=' +
+            #                    str(self._splice) + ' ark:- ark:-| add-deltas ark:- ark:-|'
+            #                    for i in range(1, self._nj + 1))
+            # else:
+            #     self._generator = ('splice-feats --left-context=' + str(self._splice) + ' --right-context=' +
+            #                        str(self._splice) + ' scp:' + self.path + '/data/' + self._folder +
+            #                        '/split' + str(self._nj) + '/' + str(i) +
+            #                        '/feats.scp ark:-| add-deltas ark:- ark:-|' for i in range(1, self._nj + 1))
+            # else:
+            #     self._generator = ('add-deltas scp:' + self.path + '/data/' + self._folder + '/split' +
+            #                        str(self._nj) + '/' + str(i) + '/feats.scp ark:-|' for i in range(1, self._nj + 1))
         else:
-            # TODO no implementation of splice-feats for own folders
+            # TODO no implementation of splice-feats for own folders, necessary?
             path_generator = [self._folder + '/' + s for s in os.listdir(self._folder)]
             # sort list for later processing
             convert = lambda text: int(text) if text.isdigit() else text

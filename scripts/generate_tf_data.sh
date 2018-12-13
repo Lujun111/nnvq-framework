@@ -20,6 +20,7 @@ stage=-5
 state_based=true
 mono=false  # TODO rename
 splice_feats=0
+cmvn=true   # cmvn, if false -> global norm
 
 #
 string=
@@ -42,6 +43,7 @@ if [ $# != 4 ]; then
   echo "  --state-based <true/false>                       # state-base or phoneme labels"
   echo "  --mono <true/false>                              # create monophone labels or triphone labels"
   echo "  --splice-feats <num>                             # splice feats with context, dafault single frame"
+  echo "  --cmvn <true/false>                              # use cmvn or global normalization"
   exit 1;
 fi
 
@@ -145,10 +147,12 @@ if [ $stage -le -1 ]; then
     for dataset in train test dev; do
         mkdir -p $working_dir/tmp_${dataset}
         if [[ "$dataset" == "train" ]]; then
-            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $nj --splice $splice_feats $data $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
+            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $nj --splice $splice_feats --cmvn $cmvn $data \
+                $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
             mv $working_dir/tmp_train/features_* $working_dir/features
         else
-            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $njd --splice $splice_feats $dataset $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
+            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $njd --splice $splice_feats --cmvn $cmvn $dataset \
+                $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
             rm $working_dir/tmp_${dataset}/features_* 2>/dev/null
         fi
         # attention: we delete the filtered features_ without backing them up
@@ -160,11 +164,11 @@ if [ $stage -le 0 ]; then
     echo "---Creating TFRecords files for data in tensorflow---"
     for dataset in train test dev; do
         if [[ "$dataset" == "train" ]]; then
-            python $framework_path/KaldiHelper/MiscHelper.py --nj $nj --splice $splice_feats --state-based $state_based $(pwd)/stats.mat \
-                $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
+            python $framework_path/KaldiHelper/MiscHelper.py --nj $nj --splice $splice_feats --state-based $state_based --cmvn $cmvn \
+                $(pwd)/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
         else
-            python $framework_path/KaldiHelper/MiscHelper.py --nj $njd --splice $splice_feats --state-based $state_based $(pwd)/stats.mat \
-                $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
+            python $framework_path/KaldiHelper/MiscHelper.py --nj $njd --splice $splice_feats --state-based $state_based --cmvn $cmvn \
+                $(pwd)/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
         fi
     done
 fi

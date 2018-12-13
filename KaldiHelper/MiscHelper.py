@@ -12,16 +12,17 @@ class Misc(object):
     """
     Misc class contains auxiliary functions
     """
-    def __init__(self, nj, state_based, splice, dim=39):
+    def __init__(self, nj, state_based, splice, cmvn, dim=39):
         # TODO can we determine the dim on the fly?
         self._trans_vec = None
         self.global_mean = None
-        self.global_var = None
+        self.global_std = None
 
         self._nj = nj
         self._state_based = state_based
         self._splice = splice
         self._dim = dim
+        self._cmvn = cmvn
 
         # set transformation vector
         # here some infos:
@@ -212,7 +213,7 @@ class Misc(object):
         :param data_array:  input data matrix
         :return:            return the normalized matrix
         """
-        return (data_array - self.global_mean) / self.global_var
+        return (data_array - self.global_mean) / self.global_std
 
     def _convert_npy_to_tfrecords(self, npy_array, path_tfrecords):
         """
@@ -232,9 +233,15 @@ class Misc(object):
             for row in npy_array:
                 # print(row[:39])
                 if self._state_based:
-                    features, label = self._normalize_data(row[:dim]), np.expand_dims(row[dim], 1)
+                    label = np.expand_dims(row[dim], 1)
                 else:
-                    features, label = self._normalize_data(row[:dim]), self.trans_vec_to_phones(np.expand_dims(row[dim], 1))
+                    label = self.trans_vec_to_phones(np.expand_dims(row[dim], 1))
+
+                if not self._cmvn:
+                    features = self._normalize_data(row[:dim])  # global normalization
+                else:
+                    features = row[:dim]
+
                 if np.nan in label:
                     print('Error, check for nan!')
                 # print(features)
@@ -266,11 +273,11 @@ class Misc(object):
                 # print(self.global_mean.shape)
             elif key == 'std':
                 print('Setting std')
-                self.global_var = np.transpose(mat)[0, :]
+                self.global_std = np.transpose(mat)[0, :]
             else:
                 print('No mean or var set!!!')
 
-        dataset = DataIterator(self._nj, self._splice, path_input)
+        dataset = DataIterator(self._nj, self._splice, self._cmvn, path_input)
 
         tmp_df = pd.DataFrame()
         count = 1
@@ -287,31 +294,6 @@ class Misc(object):
                 tmp_df = pd.DataFrame()
 
             except StopIteration:
-                break
-
-    def calculate_mi_merged(self, nj, labels_folder, phoneme_folder):
-        # TODO quite old, does it work properly
-        """
-
-        :param nj:
-        :param labels_folder:
-        :param phoneme_folder:
-        :return:
-        """
-        labels_iter = DataIterator(nj, labels_folder)
-        phoneme_iter = AlignmentIterator(nj, phoneme_folder)
-
-        tmp_df = pd.DataFrame()
-        while True:
-            try:
-                for (key_lab, mat_lab), (key_pho, mat_pho) in zip(kaldi_io.read_mat_ark(labels_iter.next_file()),
-                                                                  kaldi_io.read_ali_ark(phoneme_iter.next_file())):
-
-                    if key_lab == key_pho:
-                        tmp_df = pd.concat([tmp_df, pd.concat([pd.DataFrame(mat_lab), pd.DataFrame(mat_pho)], axis=1)])
-
-            except StopIteration:
-                print(self.calculate_mi(tmp_df.values[:, 0], tmp_df.values[:, 1]))
                 break
 
 
@@ -341,15 +323,19 @@ def main(arguments):
     # flag for state-based or phoneme-based labels
     parser.add_argument('--state-based', type=str2bool, help='flag for state-based or phoneme-based labels',
                         default=True)
+    # splice features with context range
+    parser.add_argument('--splice', type=int, help='flag for spliced features with context width',
+                        default=0)
+    # cmvn or global normalization
+    parser.add_argument('--cmvn', type=str2bool, help='flag for cmvn or global normalization',
+                        default=True)
     # define the path to the stats file
     parser.add_argument('stats', type=str, help='path to stats file')
     # define the folder which should be converted to TFRecords
     parser.add_argument('in_folder', type=str, help='alignment folder which contains the labels of the data')
     # define the output folder where to save the TFRecords files
     parser.add_argument('out', type=str, help='output folder to save the concat data')
-    # splice features with context range
-    parser.add_argument('--splice', type=int, help='flag for spliced features with context width',
-                        default=0)
+
     # parse all arguments to parser
     args = parser.parse_args(arguments)
 
@@ -358,16 +344,9 @@ def main(arguments):
         print("Argument {:14}: {}".format(arg, getattr(args, arg)))
 
     # create object and perform task
-    misc = Misc(args.nj, args.state_based, args.splice)
+    misc = Misc(args.nj, args.state_based, args.splice, args.cmvn)
     misc.create_tfrecords(args.stats, args.in_folder, args.out)
     print('Created TFRecords')
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
-    # test.calculate_mi_merged(30, '../plain_feats/backup_20k_vq/400/vq_test', '../alignments/train')
-    # test.create_tfrecords(20, False, '../stats_20k.mat', '../tmp/feat_20k_state', '../tmp')
-
-    # test.create_tfrecords(30, False, 'stats_20k.mat', '../features/dev', '../tf_data/dev')
-
-    # test = Misc()
-    # test.create_tfrecords(30, False, '../stats_20k.mat', '../tmp/feat_test_state', '../tmp')

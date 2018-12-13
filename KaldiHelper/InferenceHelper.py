@@ -1,5 +1,4 @@
 #!/home/ga96yar/tensorflow_py3/bin/python
-# coding: utf-8
 import tensorflow as tf
 import os, sys
 import collections
@@ -20,7 +19,8 @@ class InferenceModel(object):
     """
         TrainedModel for performing the inference after training
     """
-    def __init__(self, meta_file, stats_file, cond_prob_file=None, transform_prob=True, log_output=True, splice=0):
+    def __init__(self, meta_file, stats_file, cond_prob_file=None, transform_prob=True, log_output=True, splice=0,
+                 cmvn=True):
         """
         :param meta_file:       path to meta file (has to be created during training)
         :param stats_file:      path to stats file for normalization (kaldi-format)
@@ -45,6 +45,7 @@ class InferenceModel(object):
         self._dev_alignments = {}
         self._splice = splice
         self._dim = 39
+        self._cmvn = cmvn
 
         # execute some init methods
         # self._get_checkpoint_data(meta_file)
@@ -70,7 +71,7 @@ class InferenceModel(object):
         """
 
         # create DataIterator for iterate through the split folder created by kaldi
-        dataset = DataIterator(nj, self._splice, input_folder)
+        dataset = DataIterator(nj, self._splice, self._cmvn, input_folder)
 
         dim = self._dim * (2 * self._splice + 1)
 
@@ -86,7 +87,7 @@ class InferenceModel(object):
         while True:
             try:
                 data_path = dataset.next_file()  # get path to data
-                print(data_path)
+                # print(data_path)
                 # iterate through data
                 for key, mat in kaldi_io.read_mat_ark(data_path):
                     inferenced_data[key] = self._do_single_inference(mat[:, :dim])  # do inference for one batch
@@ -211,7 +212,8 @@ class InferenceModel(object):
 
         # TODO check for None; normalize data (YES/NO)
         # normalize data
-        np_mat = self._normalize_data(np_mat)
+        if not self._cmvn:
+            np_mat = self._normalize_data(np_mat)
         # inference
         # with self._graph.as_default() as g:
         #     logits = g.get_tensor_by_name("vanilla_network/nn_output:0")
@@ -475,6 +477,9 @@ def main(arguments):
                         default=0)
     # define the path to the cond_prob file
     parser.add_argument('--condprob', type=str, help='path to cond_prob file')
+    # cmvn or global normalization
+    parser.add_argument('--cmvn', type=str2bool, help='flag for cmvn or global normalization',
+                        default=True)
     # define the path to the model
     parser.add_argument('model', type=str, help='path to the model')
     # define the path to the stats file
@@ -494,8 +499,8 @@ def main(arguments):
     # create object and perform task
     if args.discrete:
         # discrete model
-        model_discrete = InferenceModel(args.model, args.stats,
-                                        log_output=False, transform_prob=False, splice=2)
+        model_discrete = InferenceModel(args.model, args.stats, cmvn=args.cmvn,
+                                        log_output=False, transform_prob=False, splice=args.splice)
 
         model_discrete.do_inference(args.nj, args.data, args.output)
     else:

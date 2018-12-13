@@ -38,7 +38,7 @@ class Loss(object):
             # loss for training a nnvq network
             elif self._settings.identifier == 'nnvq':
                 cond_prob = self._misc.conditioned_probability(self._model.inference, self._labels,
-                                                               discrete=self._settings.sampling_discrete)
+                                                               discrete=self._settings.sampling_discrete, conditioned='m_j')
                 var_cond_prob = tf.get_default_graph().get_tensor_by_name('var_cond_prob:0')
                 cond_prob = tf.assign(var_cond_prob, cond_prob)
                 # smoothed_labels = tf.one_hot(tf.squeeze(self._labels), self._settings.num_labels, axis=1)
@@ -47,6 +47,23 @@ class Loss(object):
                 used_loss = tf.reduce_mean(-tf.reduce_sum(smoothed_labels *
                                                           tf.log(tf.tensordot(self._model.inference, tf.transpose(cond_prob),
                                                                               axes=1)), reduction_indices=[1]))
+
+
+                # cond_prob = self._misc.conditioned_probability(self._model.inference, self._labels,
+                #                                                discrete=self._settings.sampling_discrete,
+                #                                                conditioned='m_j')
+                # var_cond_prob = tf.get_default_graph().get_tensor_by_name('var_cond_prob:0')
+                # cond_prob = tf.assign(var_cond_prob, cond_prob)
+                # smoothed_labels = self._misc.label_smoothing(
+                #     tf.one_hot(tf.squeeze(self._labels), self._settings.num_labels,
+                #                axis=1), epsilon=0.1)
+                # # smoothed_labels = tf.one_hot(tf.squeeze(self._labels), self._settings.num_labels, axis=1)
+                # tmp = tf.tensordot(self._model.inference, tf.transpose(cond_prob), axes=1)
+                #
+                # used_loss = tf.losses.softmax_cross_entropy(smoothed_labels, tmp)
+
+
+
             elif self._settings.identifier == 'nnvq_tri':
                 # cond_prob = self._misc.conditioned_probability(self._model.inference, self._labels,
                 #                                                discrete=self._settings.sampling_discrete)
