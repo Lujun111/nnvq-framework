@@ -1,5 +1,7 @@
+#!/home/ga96yar/tensorflow_py3/bin/python
 import tensorflow as tf
 import sys
+import random
 import argparse
 import pandas as pd
 import numpy as np
@@ -11,11 +13,21 @@ class Misc(object):
     """
     Misc class contains auxiliary functions
     """
-    def __init__(self):
-        # print('Init Misc')
+    def __init__(self, nj, state_based, splice, cmvn, dim=39):
+        # TODO can we determine the dim on the fly?
         self._trans_vec = None
         self.global_mean = None
-        self.global_var = None
+        self.global_std = None
+
+        self._nj = nj
+        self._state_based = state_based
+        self._splice = splice
+        self._dim = dim
+        self._cmvn = cmvn
+
+        # set dims for calc mi
+        self._dim_seq1 = 512
+        self._dim_seq2 = 512
 
         # set transformation vector
         # here some infos:
@@ -28,42 +40,62 @@ class Misc(object):
         # - we create an transformation vector which maps the 166 phonemes to 40
         self._get_transformation_vec()
 
-    def calculate_mi(self, labels, phonemes):
-        # TODO quite old, does it work properly
+    def calculate_mi(self, y_nn, labels, nn_output=False):
+        # TODO use dict for y_nn and labels is the best way?
         """
         Calculate the mutual information between two sets (here labels and phonemes)
 
         :param labels:      labels coming e.g. out of a neural network
         :param phonemes:    phonemes from e.g. alignments
+        :param nn_output:   flag if neural network output or just a label stream
         :return:            mutual information between labels and phonemes
         """
         alpha = 1.0
         beta = -1.0
 
-        # convert shared phonems to single
-        phonemes = self.trans_vec_to_phones(phonemes)
+        # check type of labels
 
-        p_w, p_y, p_w_y = self._helper_mi(labels.astype(np.int32), phonemes.astype(np.int32))
-        # clipping
-        p_w[p_w <= 1e-15] = 1e-15
-        p_y[p_y <= 1e-15] = 1e-15
-        p_w_y[p_w_y <= 1e-15] = 1e-15
+        assert(isinstance(y_nn, dict) and isinstance(labels, dict))
+
+        # if nn output, do argmax
+        if nn_output:
+            try:
+                y_nn['seq'] = np.argmax(y_nn['seq'], axis=1)
+            except KeyError:
+                print('Key not found!')
+
+        # convert shared phonems to single
+        if not self._state_based:
+            try:
+                labels['seq'] = self.trans_vec_to_phones(labels['seq'])
+            except KeyError:
+                print('Key not found!')
+
+        p_w, p_y, p_w_y = self._helper_mi(y_nn, labels)
 
         # normalize
         p_w /= np.sum(p_w)
         p_y /= np.sum(p_y)
-        p_w_y_scale = np.sum(p_w_y, axis=1)
-        p_w_y /= np.expand_dims(p_w_y_scale, 1)
+        p_w_y /= np.sum(p_w_y, axis=0, keepdims=True)
 
         # H(Y) on log2 base
         h_y = np.dot(p_y, np.log2(p_y))
         h_w = np.dot(p_w, np.log2(p_w))
 
         # H(Y|W) on log2 base
-        h_w_y = p_w_y * np.log2(p_w_y) # log2 base
+        h_w_y = p_w_y * np.log2(p_w_y)  # log2 base
         h_w_y = np.sum(h_w_y, axis=0)  # reduce sum
         h_w_y = np.dot(p_y, h_w_y)
-        return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
+
+        # create a dict for returning values
+        result = {
+            'MI': -alpha * h_w - beta * h_w_y,
+            'H(seq1)': -h_w,
+            'H(seq2)': -h_y,
+            'H(seq1|seq2)': -h_w_y
+        }
+
+        return result
 
     def calculate_mi_tf(self, y_nn, phonemes, codebook_size):
         # TODO quite old, does it work properly
@@ -103,25 +135,27 @@ class Misc(object):
 
         return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
 
-    def _helper_mi(self, labels, alignments):
+    def _helper_mi(self, y_nn, labels, floor_val=1e-15):
         """
         Helper functions to get P(w), P(y) and P(w|y)
 
-        :param labels:      labels coming e.g. out of a neural network
-        :param alignments:  phonemes from e.g. alignments
+        :param y_nn:        output nn (dict)
+        :param labels:      labels (dict)
         :return:            P(w), P(y) and P(w|y)
         """
-        pw_tmp = np.zeros(41)
-        py_tmp = np.zeros(400)
-        pw_y_tmp = np.zeros([41, 400])
+        pw_tmp = np.zeros(y_nn['dim'])
+        py_tmp = np.zeros(labels['dim'])
+        pw_y_tmp = np.zeros([y_nn['dim'], labels['dim']])
+
+        # set small epsilon
+        pw_tmp.fill(floor_val)
+        py_tmp.fill(floor_val)
+        pw_y_tmp.fill(floor_val)
 
         # use input array as indexing array
-        for element in alignments:
-            pw_tmp[element] += 1.0
-        for element in labels:
-            py_tmp[element] += 1.0
-        for element in zip(alignments, labels):
-            pw_y_tmp[element[0], element[1]] += 1.0
+        pw_tmp[y_nn['seq']] += 1.0
+        py_tmp[labels['seq']] += 1.0
+        pw_y_tmp[y_nn['seq'], labels['seq']] += 1.0
 
         test = pd.DataFrame(py_tmp)
         test.to_csv('test_inference.txt', header=False, index=False)
@@ -206,9 +240,9 @@ class Misc(object):
         :param data_array:  input data matrix
         :return:            return the normalized matrix
         """
-        return (data_array - self.global_mean) / self.global_var
+        return (data_array - self.global_mean) / self.global_std
 
-    def _convert_npy_to_tfrecords(self, transformation, npy_array, path_tfrecords):
+    def _convert_npy_to_tfrecords(self, npy_array, path_tfrecords):
         """
         Auxiliary function for the actual creation of the TFRecord files
 
@@ -217,13 +251,24 @@ class Misc(object):
         :param path_tfrecords:      path to save the TFRecord files
         :return:
         """
+
+        # set dim for splice
+        # set dim
+        dim = self._dim * (2 * self._splice + 1)
+
         with tf.python_io.TFRecordWriter(path_tfrecords) as tf_writer:
             for row in npy_array:
                 # print(row[:39])
-                if transformation:
-                    features, label = self._normalize_data(row[:39]), np.expand_dims(row[39], 1)
+                if self._state_based:
+                    label = np.expand_dims(row[dim], 1)
                 else:
-                    features, label = self._normalize_data(row[:39]), self.trans_vec_to_phones(np.expand_dims(row[39], 1))
+                    label = self.trans_vec_to_phones(np.expand_dims(row[dim], 1))
+
+                if not self._cmvn:
+                    features = self._normalize_data(row[:dim])  # global normalization
+                else:
+                    features = row[:dim]
+
                 if np.nan in label:
                     print('Error, check for nan!')
                 # print(features)
@@ -232,13 +277,14 @@ class Misc(object):
                     'y': tf.train.Feature(float_list=tf.train.FloatList(value=label.flatten()))}))
                 tf_writer.write(example.SerializeToString())
 
-    def create_tfrecords(self, nj, trans_phoneme, stats, path_input, path_output):
+    def create_tfrecords(self, stats, path_input, path_output):
         # TODO refactor to KaldiMiscHelper ???
         """
         Create the TFRecord files
 
         :param nj: number of jobs split into in data folder
         :param trans_phoneme: transform to single phoneme (41) or multi (166)
+        :param splice: splice feats (1 left and 1 right context)
         :param stats: stats-file to normalize data
         :param path_input: path to the folder where the features + phonemes are
         :param path_output: output path to save the tfrecords
@@ -251,14 +297,14 @@ class Misc(object):
             if key == 'mean':
                 print('Setting mean')
                 self.global_mean = np.transpose(mat)[0, :]
-                print(self.global_mean.shape)
+                # print(self.global_mean.shape)
             elif key == 'std':
                 print('Setting std')
-                self.global_var = np.transpose(mat)[0, :]
+                self.global_std = np.transpose(mat)[0, :]
             else:
                 print('No mean or var set!!!')
 
-        dataset = DataIterator(nj, path_input)
+        dataset = DataIterator(self._nj, self._splice, self._cmvn, path_input)
 
         tmp_df = pd.DataFrame()
         count = 1
@@ -267,7 +313,8 @@ class Misc(object):
                 for _, mat in kaldi_io.read_mat_ark(dataset.next_file()):
                     tmp_df = pd.concat([tmp_df, pd.DataFrame(mat)])
 
-                self._convert_npy_to_tfrecords(trans_phoneme, tmp_df.values, path_output + '/data_' + str(count) + '.tfrecords')
+                self._convert_npy_to_tfrecords(tmp_df.values, path_output + '/data_' +
+                                               str(count) + '.tfrecords')
                 print('/data_' + str(count) + '.tfrecords created')
 
                 count += 1
@@ -276,30 +323,28 @@ class Misc(object):
             except StopIteration:
                 break
 
-    def calculate_mi_merged(self, nj, labels_folder, phoneme_folder):
-        # TODO quite old, does it work properly
-        """
+    def test_mmi(self):
 
-        :param nj:
-        :param labels_folder:
-        :param phoneme_folder:
-        :return:
-        """
-        labels_iter = DataIterator(nj, labels_folder)
-        phoneme_iter = AlignmentIterator(nj, phoneme_folder)
+        s1 = np.array([random.randrange(1, self._dim_seq1, 1) for _ in range(1000)])
+        s2 = np.array([random.randrange(1, self._dim_seq2, 1) for _ in range(1000)])
 
-        tmp_df = pd.DataFrame()
-        while True:
-            try:
-                for (key_lab, mat_lab), (key_pho, mat_pho) in zip(kaldi_io.read_mat_ark(labels_iter.next_file()),
-                                                                  kaldi_io.read_ali_ark(phoneme_iter.next_file())):
+        s1_dict = {
+            'seq': s1,
+            'dim': self._dim_seq1
+        }
+        s2_dict = {
+            'seq': s2,
+            'dim': self._dim_seq2
+        }
 
-                    if key_lab == key_pho:
-                        tmp_df = pd.concat([tmp_df, pd.concat([pd.DataFrame(mat_lab), pd.DataFrame(mat_pho)], axis=1)])
+        # random
+        result = self.calculate_mi(s1_dict, s2_dict)
+        print(result)
 
-            except StopIteration:
-                print(self.calculate_mi(tmp_df.values[:, 0], tmp_df.values[:, 1]))
-                break
+        # same sequence
+        result = self.calculate_mi(s1_dict, s1_dict)
+        print(result)
+
 
 
 def str2bool(v):
@@ -328,12 +373,19 @@ def main(arguments):
     # flag for state-based or phoneme-based labels
     parser.add_argument('--state-based', type=str2bool, help='flag for state-based or phoneme-based labels',
                         default=True)
+    # splice features with context range
+    parser.add_argument('--splice', type=int, help='flag for spliced features with context width',
+                        default=0)
+    # cmvn or global normalization
+    parser.add_argument('--cmvn', type=str2bool, help='flag for cmvn or global normalization',
+                        default=True)
     # define the path to the stats file
     parser.add_argument('stats', type=str, help='path to stats file')
     # define the folder which should be converted to TFRecords
     parser.add_argument('in_folder', type=str, help='alignment folder which contains the labels of the data')
     # define the output folder where to save the TFRecords files
     parser.add_argument('out', type=str, help='output folder to save the concat data')
+
     # parse all arguments to parser
     args = parser.parse_args(arguments)
 
@@ -342,16 +394,11 @@ def main(arguments):
         print("Argument {:14}: {}".format(arg, getattr(args, arg)))
 
     # create object and perform task
-    misc = Misc()
-    misc.create_tfrecords(args.nj, args.state_based, args.stats, args.in_folder, args.out)
+    misc = Misc(args.nj, args.state_based, args.splice, args.cmvn)
+    misc.create_tfrecords(args.stats, args.in_folder, args.out)
     print('Created TFRecords')
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
-    # test.calculate_mi_merged(30, '../plain_feats/backup_20k_vq/400/vq_test', '../alignments/train')
-    # test.create_tfrecords(20, False, '../stats_20k.mat', '../tmp/feat_20k_state', '../tmp')
-
-    # test.create_tfrecords(30, False, 'stats_20k.mat', '../features/dev', '../tf_data/dev')
-
-    # test = Misc()
-    # test.create_tfrecords(30, False, '../stats_20k.mat', '../tmp/feat_test_state', '../tmp')
+    misc = Misc(35, True, 0, False)
+    misc.test_mmi()
+    # sys.exit(main(sys.argv[1:]))

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/ga96yar/tensorflow_py3/bin/python
 # -*- coding: utf-8 -*-
 """
 Calculate k-means.

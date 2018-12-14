@@ -17,6 +17,13 @@ class MiscNN(object):
         """
         self.cb_size = settings.codebook_size
         self.num_labels = settings.num_labels
+        # self.p_w = tf.Variable(tf.zeros(settings.num_labels), trainable=False, dtype=tf.float32, name='p_w'),
+        # self.p_y = tf.Variable(tf.zeros(settings.codebook_size), trainable=False, dtype=tf.float32, name='p_y'),
+        # self.p_w_y = tf.Variable(tf.zeros([settings.num_labels, settings.codebook_size]), trainable=False,
+        #                          dtype=tf.float32, name='p_w_y')
+        # self.reset_p_w = tf.assign(self.p_w, tf.zeros([self.num_labels]))
+        # self.reset_p_y = tf.assign(self.p_y, tf.zeros([self.cb_size]))
+        # self.reset_p_w_y = tf.assign(self.p_w_y, tf.zeros([self.num_labels, self.cb_size]))
 
     def calculate_mi_tf(self, y_nn, labels, nn_output=True):
         """
@@ -28,45 +35,37 @@ class MiscNN(object):
         :param nn_output:   calculate MI with with own labels
         :return:            mutual information
         """
-        alpha = 1.0
-        beta = -1.0
+        with tf.variable_scope('MiscNNHelper/calculate_mi_tf'):
+            labels = tf.cast(labels, dtype=tf.int32)
 
-        labels = tf.cast(labels, dtype=tf.int32)
+            # take the argmax of y_nn to get the class label determined by the
+            # neural network
+            if nn_output:
+                y_labels = tf.argmax(y_nn, axis=1)
+            else:
+                y_labels = y_nn
+            # y_labels = tf.Print(y_labels, [y_labels], summarize=400)
 
-        # take the argmax of y_nn to get the class label determined by the
-        # neural network
-        if nn_output:
-            y_labels = tf.argmax(y_nn, axis=1)
-        else:
-            y_labels = y_nn
-        # y_labels = tf.Print(y_labels, [y_labels], summarize=400)
+            # get p_w, p_y and p_w_y from helper
+            p_w, p_y, p_w_y = self.helper_mi_tf(y_labels, labels)
 
-        # get p_w, p_y and p_w_y from helper
-        p_w, p_y, p_w_y = self._helper_mi_tf(y_labels, labels)
+            # H(Y) on log2 base
+            h_y = tf.multiply(p_y, tf.log(tf.clip_by_value(p_y, 1e-8, 1e6)) / tf.log(2.0))
+            h_y = tf.reduce_sum(h_y)
 
-        # normalize
-        p_w /= tf.reduce_sum(p_w)
-        p_y /= tf.reduce_sum(p_y)
-        p_w_y = tf.divide(p_w_y,
-                          tf.expand_dims(tf.clip_by_value(tf.reduce_sum(p_w_y, axis=1),
-                                                          1e-8, 1e6), 1))
-        # H(Y) on log2 base
-        h_y = tf.multiply(p_y, tf.log(tf.clip_by_value(p_y, 1e-8, 1e6)) / tf.log(2.0))
-        h_y = tf.reduce_sum(h_y)
+            # H(W) on log2 base
+            h_w = tf.multiply(p_w, tf.log(tf.clip_by_value(p_w, 1e-8, 1e6)) / tf.log(2.0))
+            h_w = tf.reduce_sum(h_w)
 
-        # H(W) on log2 base
-        h_w = tf.multiply(p_w, tf.log(tf.clip_by_value(p_w, 1e-8, 1e6)) / tf.log(2.0))
-        h_w = tf.reduce_sum(h_w)
+            # H(W|Y) on log2 base
+            h_w_y = p_w_y * tf.log(tf.clip_by_value(p_w_y, 1e-12, 1e6)) / tf.log(2.0)
+            h_w_y = tf.reduce_sum(h_w_y, axis=0)
+            h_w_y = tf.multiply(p_y, h_w_y)
+            h_w_y = tf.reduce_sum(h_w_y)
 
-        # H(W|Y) on log2 base
-        h_w_y = p_w_y * tf.log(tf.clip_by_value(p_w_y, 1e-12, 1e6)) / tf.log(2.0)
-        h_w_y = tf.reduce_sum(h_w_y, axis=0)
-        h_w_y = tf.multiply(p_y, h_w_y)
-        h_w_y = tf.reduce_sum(h_w_y)
+            return -h_w + h_w_y, -h_w, -h_y, -h_w_y
 
-        return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
-
-    def _helper_mi_tf(self, y_labels, labels):
+    def helper_mi_tf(self, y_labels, labels):
         """
         Create P(w), P(y) and P(w|y) using the output labels of the neural network
         For deeper understanding how we create these probability, please check the
@@ -76,34 +75,83 @@ class MiscNN(object):
         :param labels:                  phonemes or states of the data (coming from the alignments of kaldi)
         :return pwtmp, pytmp, pw_y_tmp: return P(w), P(y) and P(w|y)
         """
+        with tf.variable_scope('MiscNNHelper/helper_mi_tf'):
+            floor_val = 1e-8
 
-        # define tf variables to use scatter_nd and scatter_nd_add
-        pwtmp = tf.Variable(tf.zeros(self.num_labels), trainable=False, dtype=tf.float32)
-        pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
-        pw_y_tmp = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
+            # define tf variables to use scatter_nd and scatter_nd_add
+            # pwtmp = tf.Variable(tf.zeros(self.num_labels), trainable=False, dtype=tf.float32)
+            # pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
+            # pw_y_tmp = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
+            pwtmp = tf.get_default_graph().get_tensor_by_name('p_w:0')
+            pytmp = tf.get_default_graph().get_tensor_by_name('p_y:0')
+            pw_y_tmp = tf.get_default_graph().get_tensor_by_name('p_w_y:0')
 
-        # create P(w)
-        pwtmp = pwtmp.assign(tf.fill([self.num_labels], 0.0))  # reset Variable/floor
-        pwtmp = tf.scatter_add(pwtmp, labels, tf.ones(tf.shape(labels)))
+            # self.reset_p_w
 
-        # create P(y)
-        pytmp = pytmp.assign(tf.fill([self.cb_size], 0.0))  # reset Variable/floor
-        pytmp = tf.scatter_add(pytmp, y_labels, tf.ones(tf.shape(y_labels)))
 
-        # create P(w|y)
-        pw_y_tmp = pw_y_tmp.assign(tf.fill([self.num_labels, self.cb_size], 0.0))  # reset Variable/floor
-        pw_y_tmp = tf.scatter_nd_add(pw_y_tmp,
-                                     tf.concat([tf.cast(labels, dtype=tf.int64), tf.expand_dims(y_labels, 1)],
-                                               axis=1), tf.ones(tf.shape(y_labels)))
+            # create P(w)
+            pwtmp = tf.assign(pwtmp, tf.zeros([self.num_labels]))  # reset Variable/floor
+            # pwtmp = self.reset_variable(pwtmp)
+            pwtmp = tf.scatter_add(pwtmp, labels, tf.ones(tf.shape(labels)))
+            pwtmp += floor_val
 
-        # adding to graph for visualisation in tensorboard
-        tf.identity(pwtmp, 'P_w')
-        tf.identity(pytmp, 'P_y')
-        tf.identity(pw_y_tmp, 'P_w_y')
+            # create P(y)
+            pytmp = tf.assign(pytmp, tf.zeros([self.cb_size]))  # reset Variable/floor
+            pytmp = tf.scatter_add(pytmp, y_labels, tf.ones(tf.shape(y_labels)))
+            pytmp += floor_val
 
-        return pwtmp, pytmp, pw_y_tmp
+            # create P(w|y)
+            pw_y_tmp = tf.assign(pw_y_tmp, tf.zeros([self.num_labels, self.cb_size]))  # reset Variable/floor
+            pw_y_tmp = tf.scatter_nd_add(pw_y_tmp,
+                                         tf.concat([tf.cast(labels, dtype=tf.int64), tf.expand_dims(y_labels, 1)],
+                                                   axis=1), tf.ones(tf.shape(y_labels)))
+            pw_y_tmp += floor_val
 
-    def conditioned_probability(self, y_nn, labels, discrete=False):
+            # adding to graph for visualisation in tensorboard
+            # tf.identity(pwtmp, 'P_w')
+            # tf.identity(pytmp, 'P_y')
+            # tf.identity(pw_y_tmp, 'P_w_y')
+
+            # normalize
+            pwtmp /= tf.reduce_sum(pwtmp)
+            pytmp /= tf.reduce_sum(pytmp)
+            pw_y_tmp /= tf.reduce_sum(pw_y_tmp, axis=1, keepdims=True)
+
+            return pwtmp, pytmp, pw_y_tmp
+
+    def create_stats_val(self, y_labels, labels):
+
+        with tf.variable_scope('MiscNNHelper/create_stats_val'):
+            labels = tf.cast(labels, dtype=tf.int32)
+            # define tf variables to use scatter_nd and scatter_nd_add
+            # pwtmp = tf.Variable(tf.zeros(self.num_labels), trainable=False, dtype=tf.float32)
+            # pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
+            # pw_y_tmp = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
+            pwtmp = tf.get_default_graph().get_tensor_by_name('p_w:0')
+            pytmp = tf.get_default_graph().get_tensor_by_name('p_y:0')
+            pw_y_tmp = tf.get_default_graph().get_tensor_by_name('p_w_y:0')
+
+            # self.reset_p_w
+
+
+            # create P(w)
+            pwtmp = tf.assign(pwtmp, tf.zeros([self.num_labels]))  # reset Variable/floor
+            # pwtmp = self.reset_variable(pwtmp)
+            pwtmp = tf.scatter_add(pwtmp, labels, tf.ones(tf.shape(labels)))
+
+            # create P(y)
+            pytmp = tf.assign(pytmp, tf.zeros([self.cb_size]))  # reset Variable/floor
+            pytmp = tf.scatter_add(pytmp, y_labels, tf.ones(tf.shape(y_labels)))
+
+            # create P(w|y)
+            pw_y_tmp = tf.assign(pw_y_tmp, tf.zeros([self.num_labels, self.cb_size]))  # reset Variable/floor
+            pw_y_tmp = tf.scatter_nd_add(pw_y_tmp,
+                                         tf.concat([tf.cast(labels, dtype=tf.int64), tf.expand_dims(y_labels, 1)],
+                                                   axis=1), tf.ones(tf.shape(y_labels)))
+
+            return pwtmp, pytmp, pw_y_tmp
+
+    def conditioned_probability(self, y_nn, labels, discrete=False, conditioned='m_j'):
         """
         Create the conditioned probability P(s_k|m_j) using the output of the neural network
         and the target labels coming out of kaldi
@@ -112,48 +160,81 @@ class MiscNN(object):
         :param labels:      phonemes or states of the data (coming from the alignments of kaldi)
         :param discrete:    flag for creating P(s_k|m_j) in the discrete way (check dissertation
                             of Neukirchen, p.62 (5.51))
+        :param conditioned: condition on 'm_j' or 'y_k'
         :return:            return P(s_k|m_j)
         """
-        # small delta for smoothing P(s_k|m_j), necessary if we log the probability
-        eps = 0.01
+        with tf.variable_scope('MiscNNHelper/conditioned_probability'):
+            # small delta for smoothing P(s_k|m_j), necessary if we log the probability
+            eps = tf.constant(1e-2)  # 1e-2 (mono) 1e-4 (tri)
 
-        # cast labels into int32
-        labels = tf.cast(labels, dtype=tf.int32)  # cast to int and put them in [[alignments]]
+            # cast labels into int32
+            labels = tf.cast(labels, dtype=tf.int32)  # cast to int and put them in [[alignments]]
 
-        # create variable in order to use scatter_nd_add and scatter_add (discrete creation of P(s_k|m_j))
-        nominator = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32, name='nom_test')
-        nominator = nominator.assign(tf.fill([self.num_labels, self.cb_size], eps))  # reset Variable/floor
-        denominator = tf.Variable(tf.zeros([self.cb_size]), trainable=False, dtype=tf.float32, name='den_test')
-        denominator = denominator.assign(tf.fill([self.cb_size], self.num_labels * eps))  # reset Variable/floor
+            # create variable in order to use scatter_nd_add and scatter_add (discrete creation of P(s_k|m_j))
+            # nominator = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32, name='nom_test')
+            nominator = tf.get_default_graph().get_tensor_by_name('var_nominator:0')
+            nominator = tf.assign(nominator, tf.fill([self.num_labels, self.cb_size], eps))  # reset Variable/floor
+            # denominator = tf.Variable(tf.zeros([self.cb_size]), trainable=False, dtype=tf.float32, name='den_test')
+            denominator = tf.get_default_graph().get_tensor_by_name('var_denominator:0')
+            tf.assign(denominator, tf.fill([self.cb_size], self.num_labels * eps))  # reset Variable/floor
 
-        if discrete:
-            # discretize the output of the neural network
-            output_dis = tf.argmax(y_nn, axis=1)
+            if discrete:
+                # discretize the output of the neural network
+                output_dis = tf.argmax(y_nn, axis=1)
 
-            # get nominator
-            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int64),
-                                                                tf.expand_dims(output_dis, 1)],
-                                                               axis=1), tf.ones(tf.shape(output_dis)))
-            # get denominator
-            denominator = tf.scatter_add(denominator, output_dis, tf.ones(tf.shape(output_dis)[0]))
+                # get nominator
+                tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int64),
+                                                                    tf.expand_dims(output_dis, 1)],
+                                                                   axis=1), tf.ones(tf.shape(output_dis)))
+                # get denominator
+                tf.scatter_add(denominator, output_dis, tf.ones(tf.shape(output_dis)[0]))
 
-            # create P(s_k|m_j) in the discrete way
-            conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+                if conditioned == 'y_k':
+                    # create P(m_j|y_k) in the discrete way
+                    conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+                elif conditioned == 'm_j':
+                    # create P(y_k|m_j) in the discrete way
+                    conditioned_prob = tf.div(nominator, tf.expand_dims(denominator, 0))
+                else:
+                    raise NotImplementedError
 
-        else:
-            # get nominator
-            nominator = tf.scatter_nd_add(nominator, labels, y_nn)
+            else:
+                # get nominator
+                nominator = tf.scatter_nd_add(nominator, labels, y_nn)
+                # nominator = tf.Print(nominator, [nominator[1, 1]])
 
-            # get denominator
-            denominator = tf.reduce_sum(y_nn, axis=0)
+                if conditioned == 'y_k':
+                    # get denominator
+                    denominator = tf.reduce_sum(y_nn, axis=1)
+                    # smoothing the probability
+                    denominator += self.num_labels * eps
+                    # create P(m_j|y_k) in the discrete way
+                    # conditioned_prob = tf.divide(nominator, denominator)
+                    conditioned_prob = tf.div(nominator, tf.reduce_sum(nominator, axis=1, keepdims=True))
+                elif conditioned == 'm_j':
+                    # get denominator
+                    denominator = tf.reduce_sum(y_nn, axis=0)
+                    # smoothing the probability
+                    denominator += self.num_labels * eps
+                    # create P(y_k|m_j) in the discrete way
+                    # conditioned_prob = tf.divide(nominator, denominator)
+                    conditioned_prob = tf.div(nominator, tf.reduce_sum(nominator, axis=0, keepdims=True))
+                else:
+                    raise NotImplementedError
+                #
+                # # create P(s_k|m_j) in the continuous way
+                # conditioned_prob = tf.divide(nominator, denominator)
+            # nominator = tf.scatter_nd_add(nominator, labels, y_nn)
+            # nominator += eps
+            # conditioned_prob = tf.div(nominator, tf.reduce_sum(nominator, axis=1, keepdims=True))
+            # nominator += eps
+            # denominator = tf.reduce_sum(y_nn, axis=1)
+            # # smoothing the probability
+            # denominator += self.num_labels * eps
+            # create P(m_j|y_k) in the discrete way
+            # conditioned_prob = tf.divide(nominator, denominator)
 
-            # smoothing the probability
-            denominator += self.num_labels * eps
-
-            # create P(s_k|m_j) in the continuous way
-            conditioned_prob = tf.divide(nominator, denominator)
-
-        return conditioned_prob
+            return conditioned_prob
 
     def joint_probability(self, y_nn, labels):
         # TODO I don't know if it works properly because I only use it for logging
@@ -164,22 +245,22 @@ class MiscNN(object):
         :param labels:  phonemes or states of the data (coming from the alignments of kaldi)
         :return:        return P(s_k, m_j)
         """
+        with tf.variable_scope('MiscNNHelper/joint_probability'):
+            # determine batch size
+            batch_size = tf.cast(tf.shape(y_nn)[0], dtype=tf.float32)
 
-        # determine batch size
-        batch_size = tf.cast(tf.shape(y_nn)[0], dtype=tf.float32)
+            # create variable in order to use scatter_nd_add
+            joint_prob = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
+            joint_prob = joint_prob.assign(tf.fill([self.num_labels, self.cb_size], 0.0))  # reset Variable/floor
 
-        # create variable in order to use scatter_nd_add
-        joint_prob = tf.Variable(tf.zeros([self.num_labels, self.cb_size]), trainable=False, dtype=tf.float32)
-        joint_prob = joint_prob.assign(tf.fill([self.num_labels, self.cb_size], 0.0))  # reset Variable/floor
+            # cast labels to int32
+            labels = tf.cast(labels, dtype=tf.int32)
 
-        # cast labels to int32
-        labels = tf.cast(labels, dtype=tf.int32)
+            # create P(s_k, m_j), (check dissertation of Neukirchen, p.61 (5.46))
+            joint_prob = tf.scatter_nd_add(joint_prob, labels, y_nn)
+            joint_prob = tf.div(joint_prob, batch_size)
 
-        # create P(s_k, m_j), (check dissertation of Neukirchen, p.61 (5.46))
-        joint_prob = tf.scatter_nd_add(joint_prob, labels, y_nn)
-        joint_prob = tf.div(joint_prob, batch_size)
-
-        return joint_prob
+            return joint_prob
 
     def vq_data(self, y_nn, labels, nominator, denominator, discrete=True):
         """
@@ -193,28 +274,35 @@ class MiscNN(object):
         :param discrete:    flag for creating P(s_k|m_j) in a discrete way
         :return:            return nominator and denominator of creating P(s_k|m_j)
         """
-        # cast labels to int32
-        labels = tf.cast(labels, dtype=tf.int64)
+        with tf.variable_scope('MiscNNHelper/vq_data'):
+            # cast labels to int32
+            labels = tf.cast(labels, dtype=tf.int64)
 
-        y_labels = tf.argmax(y_nn, axis=1)
-        # labels_softmax = output_soft
+            y_labels = tf.argmax(y_nn, axis=1)
+            # labels_softmax = output_soft
 
-        if discrete:
-            # create nominator
-            nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int64),
-                                                                tf.expand_dims(y_labels, 1)],
-                                                               axis=1), tf.ones(tf.shape(y_labels)))
+            if discrete:
+                # create nominator
+                nominator = tf.scatter_nd_add(nominator, tf.concat([tf.cast(labels, dtype=tf.int64),
+                                                                    tf.expand_dims(y_labels, 1)],
+                                                                   axis=1), tf.ones(tf.shape(y_labels)))
 
-            # create dominator
-            denominator = tf.scatter_add(denominator, y_labels, tf.ones(tf.shape(y_labels)[0]))
-        else:
-            raise NotImplementedError("Not implemented!")
+                # create dominator
+                denominator = tf.scatter_add(denominator, y_labels, tf.ones(tf.shape(y_labels)[0]))
+            else:
+                raise NotImplementedError("Not implemented!")
 
-        return nominator, denominator
+            return nominator, denominator
 
     @staticmethod
     def reset_variable(variable):
-        return variable.assign(tf.fill(tf.shape(variable), 0.0))
+        with tf.variable_scope('MiscNNHelper/reset_variable'):
+            return variable.assign(tf.fill(tf.shape(variable), 0.0))
+
+    def reset_mi_variables(self):
+        tf.assign(self.p_w, tf.zeros([self.num_labels]))
+        tf.assign(self.p_y, tf.zeros([self.cb_size]))
+        tf.assign(self.p_w_y, tf.zeros([self.num_labels, self.cb_size]))
 
     def testing_stuff(self, output_nn, cond_prob, phonemes):
         """
@@ -284,11 +372,11 @@ class MiscNN(object):
         :param labels:  labels for smoothing (one-hot-encoded)
         :return:        smoothed labels
         """
+        with tf.variable_scope('MiscNNHelper/label_smoothing'):
+            # determine the dimension of the one hot for u(k)
+            k = tf.cast(tf.shape(labels)[1], dtype=tf.float32)
 
-        # determine the dimension of the one hot for u(k)
-        k = tf.cast(tf.shape(labels)[1], dtype=tf.float32)
+            # create new labels
+            smoothed_labels = (1.0 - epsilon) * labels + epsilon / k
 
-        # create new labels
-        smoothed_labels = (1.0 - epsilon) * labels + epsilon / k
-
-        return smoothed_labels
+            return smoothed_labels

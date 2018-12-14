@@ -35,6 +35,10 @@ class Train(object):
         self._input_dev = data_feeder.dev.get_next()
 
         self._current_value = -100.0
+        self._count_reduce_lr = 0
+
+        self._increment_epoch_op = tf.assign_add(self._variables['epoch'], 1)
+        self._mult_lr_op = tf.multiply(self._variables['learning_rate'], Settings.lr_decay)
 
         self._create_train_dict()
 
@@ -145,54 +149,61 @@ class Train(object):
 
     def _create_train_dict(self):
         # we create different dicts depending on the task
+        with tf.variable_scope('TrainHelper/create_train_dict'):
 
-        if self._settings.identifier == 'nnvq':
-            self._train_dict = {
-                'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
-                'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
-                'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
-                                                                discrete=Settings.sampling_discrete),
-                'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
-                                              self._variables['nominator'], self._variables['denominator']),
-                'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'], clip_norm=0.75),
-                'output': self._model.inference,
-                'count': self._variables['global_step']}
+            if self._settings.identifier == 'nnvq':
+                self._train_dict = {
+                    'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
+                    # 'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
+                    'cond_prob': self._variables['conditioned_probability'],
+                    # 'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
+                    #                               self._variables['nominator'], self._variables['denominator']),
+                    'loss': self._loss.loss,
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'], clipping=False),
+                    'output': self._model.inference,
+                    'count': self._variables['global_step'],
+                    'learning_rate': self._variables['learning_rate']}
+                self._val_dict = {
+                    'stats': self._misc.create_stats_val(tf.argmax(self._model.inference, axis=1),
+                                                         self._placeholders['ph_labels'])}
 
-        elif self._settings.identifier == 'nnvq_tri':
-            self._train_dict = {
-                'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
-                'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
-                'cond_prob': self._variables['conditioned_probability'],
-                'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
-                'output': self._model.inference,
-                'count': self._variables['global_step']}
+            elif self._settings.identifier == 'nnvq_tri':
+                self._train_dict = {
+                    'mi': self._misc.calculate_mi_tf(self._model.inference, self._placeholders['ph_labels']),
+                    'joint_prob': self._misc.joint_probability(self._model.inference, self._placeholders['ph_labels']),
+                    # 'cond_prob': self._misc.conditioned_probability(self._model.inference, self._placeholders['ph_labels'],
+                    #                                                 discrete=Settings.sampling_discrete),
+                    'data_vq': self._misc.vq_data(self._model.inference, self._placeholders['ph_labels'],
+                                                  self._variables['nominator'], self._variables['denominator']),
+                    'loss': self._loss.loss,
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
+                    'output': self._model.inference,
+                    'count': self._variables['global_step']}
 
-            # self._variables['conditioned_probability'.ass
+                # self._variables['conditioned_probability'.ass
 
-        elif self._settings.identifier == 'vanilla':
-            self._train_dict = {
-                'loss': self._loss.loss,
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
-                'accuracy': tf.metrics.accuracy(self._placeholders['ph_labels'],
-                                                tf.argmax(self._model.inference, axis=1)),
-                'output': self._model.inference,
-                'count': self._variables['global_step']}
+            elif self._settings.identifier == 'vanilla':
+                self._train_dict = {
+                    'loss': self._loss.loss,
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step']),
+                    'accuracy': tf.metrics.accuracy(self._placeholders['ph_labels'],
+                                                    tf.argmax(self._model.inference, axis=1)),
+                    'output': self._model.inference,
+                    'count': self._variables['global_step']}
 
-        elif self._settings.identifier == 'combination':
-            self._train_dict = {
-                'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._placeholders['ph_labels']),
-                'loss': self._loss.loss,
-                'accuracy_vanilla': tf.metrics.accuracy(self._placeholders['ph_labels'],
-                                                                        tf.argmax(self._model.inference_vanilla, axis=1)),
-                'accuracy_combination': tf.metrics.accuracy(self._placeholders['ph_labels'],
-                                                                        tf.argmax(self._model.inference_combination, axis=1)),
-                'output': self._model.inference_combination,
-                'count': self._variables['global_step'],
-                'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._placeholders['ph_labels'], self._variables['nominator'],
-                                              self._variables['denominator']),
-                'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'])}
+            elif self._settings.identifier == 'combination':
+                self._train_dict = {
+                    'mi': self._misc.calculate_mi_tf(self._model.inference_nnvq, self._placeholders['ph_labels']),
+                    'loss': self._loss.loss,
+                    'accuracy_vanilla': tf.metrics.accuracy(self._placeholders['ph_labels'],
+                                                                            tf.argmax(self._model.inference_vanilla, axis=1)),
+                    'accuracy_combination': tf.metrics.accuracy(self._placeholders['ph_labels'],
+                                                                            tf.argmax(self._model.inference_combination, axis=1)),
+                    'output': self._model.inference_combination,
+                    'count': self._variables['global_step'],
+                    'data_vq': self._misc.vq_data(self._model.inference_nnvq, self._placeholders['ph_labels'], self._variables['nominator'],
+                                                  self._variables['denominator']),
+                    'train_op': self._optimizer.get_train_op(global_step=self._variables['global_step'])}
 
         self._session.run(tf.local_variables_initializer())
         self._session.run(tf.global_variables_initializer())
@@ -226,16 +237,18 @@ class Train(object):
                                                 feed_dict={self._placeholders['ph_train']: True,
                                                            self._placeholders['ph_features']: feat,
                                                            self._placeholders['ph_labels']: labs,
-                                                           self._placeholders['ph_lr']: Settings.learning_rate_pre,
                                                            self._placeholders['ph_last_layer']: True})
-
+                # self._settings.current_lr = self._session.run(self._variables['learning_rate'])
                 # print(np.max(return_dict['output']))
-                if return_dict['count'] % 100:
+                # print(feat)
+                # print(np.sum(return_dict['cond_prob'], axis=0))
+                if return_dict['count'] % 10 == 0:
                     # summary_tmp.value.add(tag='misc/alpha', simple_value=return_dict['alpha'])
                     self._train_writer.add_summary(self._summary.train_logs(return_dict), return_dict['count'])
                     self._train_writer.flush()
 
             except tf.errors.OutOfRangeError:
+
                 # print(nom_vq/den_vq)
                 # print('loss: ' + str(loss_value))
                 # print('max: ' + str(np.max(y_print)))
@@ -259,37 +272,77 @@ class Train(object):
         self._feeder.init_dev()
         output_all = []
         labels_all = []
+        p_w = np.zeros([Settings.num_labels])
+        p_y = np.zeros([Settings.codebook_size])
+        p_w_y = np.zeros([Settings.num_labels, Settings.codebook_size])
+        p_w.fill(1e-10)
+        p_y.fill(1e-10)
+        p_w_y.fill(1e-10)
 
         while True:
             try:
                 feat, labs = self._session.run([self._input_dev[0], self._input_dev[1]])
 
-                output_nn = self._session.run(self._train_dict['output'],
-                                              feed_dict={self._placeholders['ph_train']: False,
-                                              self._placeholders['ph_features']: feat,
-                                              self._placeholders['ph_labels']: labs,
-                                              self._placeholders['ph_lr']: Settings.learning_rate_pre,
-                                              self._placeholders['ph_last_layer']: False})
+                # output_nn = self._session.run(self._train_dict['output'],
+                #                               feed_dict={self._placeholders['ph_train']: False,
+                #                               self._placeholders['ph_features']: feat,
+                #                               self._placeholders['ph_labels']: labs,
+                #                               self._placeholders['ph_last_layer']: False})
+                stats = self._session.run(self._val_dict['stats'],
+                                          feed_dict={self._placeholders['ph_train']: False,
+                                          self._placeholders['ph_features']: feat,
+                                          self._placeholders['ph_labels']: labs,
+                                          self._placeholders['ph_last_layer']: False})
 
-                output_all.append(np.argmax(output_nn, axis=1))
-                labels_all.append(labs)
+                # y_tmp = np.argmax(output_nn, axis=1).astype(np.int32)
+                # p_w[labs.astype(np.int32)] += 1.0
+                # p_y[y_tmp] += 1.0
+                # p_w_y[labs.astype(np.int32), y_tmp] += 1.0
+
+                p_w += stats[0]
+                p_y += stats[1]
+                p_w_y += stats[2]
+
+                # output_all.append(np.argmax(output_nn, axis=1))
+                # output_all.append(feat)
+                # labels_all.append(labs)
 
             except tf.errors.OutOfRangeError:
-
-
                 # reshape data
-                output_all = np.concatenate(output_all)
-                labels_all = np.concatenate(labels_all)
+                # output_all = np.concatenate(output_all)
+                # labels_all = np.concatenate(labels_all)
+
+                p_w /= np.sum(p_w)
+                p_y /= np.sum(p_y)
+                p_w_y /= np.expand_dims(np.sum(p_w_y, axis=1), 1)
+
+                # H(Y) on log2 base
+                h_y = p_y * np.log(p_y) / np.log(2.0)
+                h_y = np.sum(h_y)
+                # print(h_y)
+
+                # H(W) on log2 base
+                h_w = p_w * np.log(p_w) / np.log(2.0)
+                h_w = np.sum(h_w)
+                # print(h_w)
+
+                # H(W|Y) on log2 base
+                h_w_y = p_w_y * np.log(p_w_y) / np.log(2.0)
+                h_w_y = np.sum(h_w_y, axis=0)
+                h_w_y = p_y * h_w_y
+                h_w_y = np.sum(h_w_y)
+                # print(h_w_y)
+
                 val_dict = {
-                    'mi': self._misc.calculate_mi_tf(output_all, labels_all, nn_output=False),
                     'count': self._train_dict['count']
                 }
                 return_dict = self._session.run(val_dict)
+                return_dict['mi'] = [-h_w + h_w_y, -h_w, -h_y, -h_w_y]
                 #
-                # data_all = list(zip(features_all, labels_all))
+                # data_all = list(zip(output_all, labels_all))
                 #
                 # # pick subset to fit onto the gpu
-                # sub_percentage = 0.1
+                # sub_percentage = 1.0
                 # sub_indices = np.random.choice(len(data_all), int(sub_percentage * len(data_all)), replace=False)
                 # sub_data = [data_all[i] for i in sub_indices]
                 #
@@ -305,7 +358,6 @@ class Train(object):
                 #                                 feed_dict={self._placeholders['ph_train']: False,
                 #                                            self._placeholders['ph_features']: features_all,
                 #                                            self._placeholders['ph_labels']: labels_all,
-                #                                            self._placeholders['ph_lr']: Settings.learning_rate_pre,
                 #                                            self._placeholders['ph_last_layer']: False})
 
                 self._train_writer.add_summary(self._summary.validation_logs(return_dict), return_dict['count'])
@@ -313,8 +365,23 @@ class Train(object):
 
                 # save depending on model
                 self._saver.save(return_dict)
+
+                # # check for reducing learning rate
+                # if self._saver.current_count > Settings.lr_epoch_decrease:
+                #     print('Validation not getting better for ' + str(Settings.lr_epoch_decrease) +
+                #           ' Epochs')
+                #     print('Reducing learning rate by ' + str(Settings.lr_decay))
+                #     self._session.run(self._mult_lr_op)
+                #     self._saver.current_count = 0
+
+                # increase epoch counter
+                _, self._settings.current_lr = self._session.run([self._increment_epoch_op,
+                                                                  self._variables['learning_rate']])
+
+
                 break
 
+    @show_timing(text='p_s_m', verbosity=2)
     def create_p_s_m(self):
 
         self._feeder.init_train()
@@ -341,9 +408,10 @@ class Train(object):
                     for key, mat in list(save_dict.items()):
                         kaldi_io.write_mat(f, mat, key=key)
 
-                # reset den and nom
+                # reset den and nom, set variable
                 self._session.run([self._misc.reset_variable(self._variables['nominator']),
-                                   self._misc.reset_variable(self._variables['denominator'])])
+                                   self._misc.reset_variable(self._variables['denominator']),
+                                   tf.assign(self._variables['conditioned_probability'], prob)])
 
                 break
 

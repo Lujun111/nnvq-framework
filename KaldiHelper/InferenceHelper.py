@@ -1,9 +1,10 @@
-#!/home/ga96yar/tensorflow_env/bin/python
-# coding: utf-8
+#!/home/ga96yar/tensorflow_py3/bin/python
 import tensorflow as tf
-import os
+import os, sys
+import collections
 import pandas as pd
 import re
+import argparse
 import numpy as np
 from kaldi_io import kaldi_io
 from KaldiHelper.IteratorHelper import DataIterator
@@ -18,7 +19,8 @@ class InferenceModel(object):
     """
         TrainedModel for performing the inference after training
     """
-    def __init__(self, meta_file, stats_file, cond_prob_file, transform_prob=True, log_output=True):
+    def __init__(self, meta_file, stats_file, cond_prob_file=None, transform_prob=True, log_output=True, splice=0,
+                 cmvn=True):
         """
         :param meta_file:       path to meta file (has to be created during training)
         :param stats_file:      path to stats file for normalization (kaldi-format)
@@ -41,6 +43,9 @@ class InferenceModel(object):
         self._meta_file = None
         self._checkpoint_folder = None
         self._dev_alignments = {}
+        self._splice = splice
+        self._dim = 39
+        self._cmvn = cmvn
 
         # execute some init methods
         # self._get_checkpoint_data(meta_file)
@@ -51,7 +56,7 @@ class InferenceModel(object):
         # setting transform matrix
         if self.transform:
             self._set_probabilities(cond_prob_file)
-        self._load_dev_alignemnts()
+        # self._load_dev_alignemnts()
         # hint to produce a discrete output:
         # set transform_prob=False and log_output=False, then you get discrete labels out
         # of the inference model
@@ -66,7 +71,9 @@ class InferenceModel(object):
         """
 
         # create DataIterator for iterate through the split folder created by kaldi
-        dataset = DataIterator(nj, input_folder)
+        dataset = DataIterator(nj, self._splice, self._cmvn, input_folder)
+
+        dim = self._dim * (2 * self._splice + 1)
 
         # number iterator for counting, necessary for writing the matrices later
         iterator = iter([i for i in range(1, dataset.get_size() + 1)])
@@ -80,21 +87,23 @@ class InferenceModel(object):
         while True:
             try:
                 data_path = dataset.next_file()  # get path to data
-                print(data_path)
+                # print(data_path)
                 # iterate through data
                 for key, mat in kaldi_io.read_mat_ark(data_path):
-                    inferenced_data[key] = self._do_single_inference(mat[:, :39])  # do inference for one batch
-                    tmp = self._do_single_inference(mat[:, :39])
+                    inferenced_data[key] = self._do_single_inference(mat[:, :dim])  # do inference for one batch
+                    tmp = self._do_single_inference(mat[:, :dim])
                     # check_data[key] = [np.argmax(tmp[0], axis=1), np.argmax(tmp[1], axis=1),
                     #                    np.argmax(tmp[2], axis=1), self._dev_alignments[key]]
-                    if np.shape(mat)[1] > 39:   # get statistics for mi (only if we input data + labels), for debugging
-                        phoneme_all[key] = mat[:, 39]
+                    if np.shape(mat)[1] > dim:   # get statistics for mi (only if we input data + labels), for debugging
+                        phoneme_all[key] = mat[:, dim]
                     # add for debugging, see below
                     output_all[key] = tmp
 
+                od = collections.OrderedDict(sorted(inferenced_data.items()))
+
                 # write posteriors (inferenced data) to files
                 with open(output_folder + '/feats_vq_' + str(next(iterator)), 'wb') as f:
-                    for key, mat in list(inferenced_data.items()):
+                    for key, mat in list(od.items()):
                         if self.transform:
                             kaldi_io.write_mat(f, mat, key=key)
                         else:
@@ -203,7 +212,8 @@ class InferenceModel(object):
 
         # TODO check for None; normalize data (YES/NO)
         # normalize data
-        np_mat = self._normalize_data(np_mat)
+        if not self._cmvn:
+            np_mat = self._normalize_data(np_mat)
         # inference
         # with self._graph.as_default() as g:
         #     logits = g.get_tensor_by_name("vanilla_network/nn_output:0")
@@ -297,7 +307,7 @@ class InferenceModel(object):
         """
         self._session = tf.Session(graph=self._graph)
         # self._session.run(tf.global_variables_initializer())
-        self._session1 = tf.Session(graph=self._graph1)
+        # self._session1 = tf.Session(graph=self._graph1)
         # self._session1.run(tf.global_variables_initializer())
 
     def _create_graph(self, meta_file, identifier=None):
@@ -436,27 +446,74 @@ class InferenceModel(object):
         print('Finished loading dev alignments')
 
 
-if __name__ == "__main__":
-    # set transform_prob=False if you don't want to get a continuous output (default is True)
+def str2bool(v):
+    """
+    Converts string argument to bool
+    :param v:
+    :return:
+    """
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    # flag for model type
-    discrete = True
 
-    if discrete:
+def main(arguments):
+    """
+    Create argument parser to execute python file from console
+    """
+    print(arguments)
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    # add number of jobs / how the data is split
+    parser.add_argument('--nj', type=int, help='number of training jobs', default=35)
+    # flag for state-based or phoneme-based labels
+    parser.add_argument('--discrete', type=str2bool, help='flag for discrete or continuous mode',
+                        default=True)
+    # splice features with context range
+    parser.add_argument('--splice', type=int, help='flag for spliced features with context width',
+                        default=0)
+    # define the path to the cond_prob file
+    parser.add_argument('--condprob', type=str, help='path to cond_prob file')
+    # cmvn or global normalization
+    parser.add_argument('--cmvn', type=str2bool, help='flag for cmvn or global normalization',
+                        default=True)
+    # define the path to the model
+    parser.add_argument('model', type=str, help='path to the model')
+    # define the path to the stats file
+    parser.add_argument('stats', type=str, help='path to stats file')
+    # define the folder which should be converted to TFRecords
+    parser.add_argument('data', type=str, help='data for inference')
+    # define the output folder where to save the TFRecords files
+    parser.add_argument('output', type=str, help='output folder to save the inferenced data')
+
+    # parse all arguments to parser
+    args = parser.parse_args(arguments)
+
+    # print the arguments which we fed into
+    for arg in vars(args):
+        print("Argument {:14}: {}".format(arg, getattr(args, arg)))
+
+    # create object and perform task
+    if args.discrete:
         # discrete model
-        model_discrete = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',
-                                      '../p_s_m.mat', log_output=False, transform_prob=False)
+        model_discrete = InferenceModel(args.model, args.stats, cmvn=args.cmvn,
+                                        log_output=False, transform_prob=False, splice=args.splice)
 
-        model_discrete.do_inference(20, '/home/ga96yar/kaldi/egs/tedlium/s5_r2/features/train_20k/feats', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
-                                                                     '/exp/test_new_400/vq_train')
-        model_discrete.do_inference(30, 'test', '/home/ga96yar/kaldi/egs/tedlium/s5_r2/'
-                                                'exp/test_new_400/vq_test')
+        model_discrete.do_inference(args.nj, args.data, args.output)
     else:
         # continuous model
-        model_continuous = InferenceModel('../model_checkpoint/saved_model.meta', '../stats_20k.mat',
-                                        '../p_s_m.mat',)
-        # model_continuous.do_inference(20, 'features/train_20k/feats', '../tmp/tmp_testing')
-        model_continuous.do_inference(30, 'test', '../tmp/tmp_testing')
+        model_continuous = InferenceModel(args.model, args.stats, cond_prob_file=args.condprob)
+        model_continuous.do_inference(args.nj, args.data, args.output)
+
+
+if __name__ == "__main__":
+    # set transform_prob=False if you don't want to get a continuous output (default is True)
+    sys.exit(main(sys.argv[1:]))
+
+
 
 
 

@@ -7,20 +7,24 @@ class Saver(object):
         self._saver = tf.train.Saver()
         self._session = session
         self._current_value = -100.0
+        self.current_count = 0
 
     def save(self, save_dict):
-        if self._settings.identifier == 'vanilla':
-            if save_dict['accuracy'][0] > self._current_value:
-                print('Saving better model...')
-                self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
-                self._current_value = save_dict['accuracy'][0]
-        elif self._settings.identifier == 'combination':
-            if save_dict['accuracy_combination'][0] > self._current_value:
-                print('Saving better model...')
-                self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
-                self._current_value = save_dict['accuracy_combination'][0]
-        elif self._settings.identifier in ['nnvq', 'nnvq_tri']:
-            if save_dict['mi'][0] > self._current_value:
-                print('Saving better model...')
-                self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
-                self._current_value = save_dict['mi'][0]
+        with tf.variable_scope('SaverHelper/save'):
+            if self._settings.identifier == 'vanilla':
+                if save_dict['accuracy'][0] > self._current_value:
+                    print('Saving better model...')
+                    self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
+                    self._current_value = save_dict['accuracy'][0]
+            elif self._settings.identifier == 'combination':
+                if save_dict['accuracy_combination'][0] > self._current_value:
+                    print('Saving better model...')
+                    self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
+                    self._current_value = save_dict['accuracy_combination'][0]
+            elif self._settings.identifier in ['nnvq', 'nnvq_tri']:
+                if save_dict['mi'][0] > self._current_value:
+                    print('Saving better model...')
+                    self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
+                    self._current_value = save_dict['mi'][0]
+                else:
+                    self.current_count += 1

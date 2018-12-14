@@ -18,7 +18,9 @@ njd=30  # number of jobs for decoding
 cmd=run.pl
 stage=-5
 state_based=true
-mono=false
+mono=false  # TODO rename
+splice_feats=0
+cmvn=true   # cmvn, if false -> global norm
 
 #
 string=
@@ -36,10 +38,12 @@ if [ $# != 4 ]; then
   echo "main options (for others, see top of script file)"
   echo "  --config <config-file>                           # config containing options"
   echo "  --nj <nj>                                        # number of parallel jobs for train data"
-  echo "  --njd <njd>                                        # number of parallel jobs for dev/test data"
+  echo "  --njd <njd>                                      # number of parallel jobs for dev/test data"
   echo "  --cmd (utils/run.pl|utils/queue.pl <queue opts>) # how to run jobs."
   echo "  --state-based <true/false>                       # state-base or phoneme labels"
   echo "  --mono <true/false>                              # create monophone labels or triphone labels"
+  echo "  --splice-feats <num>                             # splice feats with context, dafault single frame"
+  echo "  --cmvn <true/false>                              # use cmvn or global normalization"
   exit 1;
 fi
 
@@ -61,7 +65,7 @@ fi
 
 # create log folder in working dir
 mkdir -p $working_dir/log $working_dir/alignments $working_dir/tf_data/train_$string \
-    $working_dir/tf_data/dev_$string $working_dir/tf_data/test_$string
+    $working_dir/tf_data/dev_$string $working_dir/tf_data/test_$string $working_dir/features
 
 
 # check if all files are existend
@@ -143,12 +147,15 @@ if [ $stage -le -1 ]; then
     for dataset in train test dev; do
         mkdir -p $working_dir/tmp_${dataset}
         if [[ "$dataset" == "train" ]]; then
-            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $nj $data $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
+            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $nj --splice $splice_feats --cmvn $cmvn $data \
+                $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
+            mv $working_dir/tmp_train/features_* $working_dir/features
         else
-            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $njd $dataset $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
+            python $framework_path/KaldiHelper/KaldiMiscHelper.py --nj $njd --splice $splice_feats --cmvn $cmvn $dataset \
+                $working_dir/alignments/all_ali_${string}_${dataset} $working_dir/tmp_${dataset}
+            rm $working_dir/tmp_${dataset}/features_* 2>/dev/null
         fi
         # attention: we delete the filtered features_ without backing them up
-        rm $working_dir/tmp_${dataset}/features_* 2>/dev/null
     done
 fi
 
@@ -157,11 +164,11 @@ if [ $stage -le 0 ]; then
     echo "---Creating TFRecords files for data in tensorflow---"
     for dataset in train test dev; do
         if [[ "$dataset" == "train" ]]; then
-            python $framework_path/KaldiHelper/MiscHelper.py --nj $nj --state-based $state_based $framework_path/stats.mat \
-                $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
+            python $framework_path/KaldiHelper/MiscHelper.py --nj $nj --splice $splice_feats --state-based $state_based --cmvn $cmvn \
+                $(pwd)/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
         else
-            python $framework_path/KaldiHelper/MiscHelper.py --nj $njd --state-based $state_based $framework_path/stats.mat \
-                $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
+            python $framework_path/KaldiHelper/MiscHelper.py --nj $njd --splice $splice_feats --state-based $state_based --cmvn $cmvn \
+                $(pwd)/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
         fi
     done
 fi
