@@ -1,6 +1,7 @@
 #!/home/ga96yar/tensorflow_py3/bin/python
 import tensorflow as tf
 import sys
+import random
 import argparse
 import pandas as pd
 import numpy as np
@@ -24,6 +25,10 @@ class Misc(object):
         self._dim = dim
         self._cmvn = cmvn
 
+        # set dims for calc mi
+        self._dim_seq1 = 512
+        self._dim_seq2 = 512
+
         # set transformation vector
         # here some infos:
         # - there are 40 phonemes for training (with SIL)
@@ -35,42 +40,62 @@ class Misc(object):
         # - we create an transformation vector which maps the 166 phonemes to 40
         self._get_transformation_vec()
 
-    def calculate_mi(self, labels, phonemes):
-        # TODO quite old, does it work properly
+    def calculate_mi(self, y_nn, labels, nn_output=False):
+        # TODO use dict for y_nn and labels is the best way?
         """
         Calculate the mutual information between two sets (here labels and phonemes)
 
         :param labels:      labels coming e.g. out of a neural network
         :param phonemes:    phonemes from e.g. alignments
+        :param nn_output:   flag if neural network output or just a label stream
         :return:            mutual information between labels and phonemes
         """
         alpha = 1.0
         beta = -1.0
 
-        # convert shared phonems to single
-        phonemes = self.trans_vec_to_phones(phonemes)
+        # check type of labels
 
-        p_w, p_y, p_w_y = self._helper_mi(labels.astype(np.int32), phonemes.astype(np.int32))
-        # clipping
-        p_w[p_w <= 1e-15] = 1e-15
-        p_y[p_y <= 1e-15] = 1e-15
-        p_w_y[p_w_y <= 1e-15] = 1e-15
+        assert(isinstance(y_nn, dict) and isinstance(labels, dict))
+
+        # if nn output, do argmax
+        if nn_output:
+            try:
+                y_nn['seq'] = np.argmax(y_nn['seq'], axis=1)
+            except KeyError:
+                print('Key not found!')
+
+        # convert shared phonems to single
+        if not self._state_based:
+            try:
+                labels['seq'] = self.trans_vec_to_phones(labels['seq'])
+            except KeyError:
+                print('Key not found!')
+
+        p_w, p_y, p_w_y = self._helper_mi(y_nn, labels)
 
         # normalize
         p_w /= np.sum(p_w)
         p_y /= np.sum(p_y)
-        p_w_y_scale = np.sum(p_w_y, axis=1)
-        p_w_y /= np.expand_dims(p_w_y_scale, 1)
+        p_w_y /= np.sum(p_w_y, axis=0, keepdims=True)
 
         # H(Y) on log2 base
         h_y = np.dot(p_y, np.log2(p_y))
         h_w = np.dot(p_w, np.log2(p_w))
 
         # H(Y|W) on log2 base
-        h_w_y = p_w_y * np.log2(p_w_y) # log2 base
+        h_w_y = p_w_y * np.log2(p_w_y)  # log2 base
         h_w_y = np.sum(h_w_y, axis=0)  # reduce sum
         h_w_y = np.dot(p_y, h_w_y)
-        return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
+
+        # create a dict for returning values
+        result = {
+            'MI': -alpha * h_w - beta * h_w_y,
+            'H(seq1)': -h_w,
+            'H(seq2)': -h_y,
+            'H(seq1|seq2)': -h_w_y
+        }
+
+        return result
 
     def calculate_mi_tf(self, y_nn, phonemes, codebook_size):
         # TODO quite old, does it work properly
@@ -110,25 +135,27 @@ class Misc(object):
 
         return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
 
-    def _helper_mi(self, labels, alignments):
+    def _helper_mi(self, y_nn, labels, floor_val=1e-15):
         """
         Helper functions to get P(w), P(y) and P(w|y)
 
-        :param labels:      labels coming e.g. out of a neural network
-        :param alignments:  phonemes from e.g. alignments
+        :param y_nn:        output nn (dict)
+        :param labels:      labels (dict)
         :return:            P(w), P(y) and P(w|y)
         """
-        pw_tmp = np.zeros(41)
-        py_tmp = np.zeros(400)
-        pw_y_tmp = np.zeros([41, 400])
+        pw_tmp = np.zeros(y_nn['dim'])
+        py_tmp = np.zeros(labels['dim'])
+        pw_y_tmp = np.zeros([y_nn['dim'], labels['dim']])
+
+        # set small epsilon
+        pw_tmp.fill(floor_val)
+        py_tmp.fill(floor_val)
+        pw_y_tmp.fill(floor_val)
 
         # use input array as indexing array
-        for element in alignments:
-            pw_tmp[element] += 1.0
-        for element in labels:
-            py_tmp[element] += 1.0
-        for element in zip(alignments, labels):
-            pw_y_tmp[element[0], element[1]] += 1.0
+        pw_tmp[y_nn['seq']] += 1.0
+        py_tmp[labels['seq']] += 1.0
+        pw_y_tmp[y_nn['seq'], labels['seq']] += 1.0
 
         test = pd.DataFrame(py_tmp)
         test.to_csv('test_inference.txt', header=False, index=False)
@@ -296,6 +323,29 @@ class Misc(object):
             except StopIteration:
                 break
 
+    def test_mmi(self):
+
+        s1 = np.array([random.randrange(1, self._dim_seq1, 1) for _ in range(1000)])
+        s2 = np.array([random.randrange(1, self._dim_seq2, 1) for _ in range(1000)])
+
+        s1_dict = {
+            'seq': s1,
+            'dim': self._dim_seq1
+        }
+        s2_dict = {
+            'seq': s2,
+            'dim': self._dim_seq2
+        }
+
+        # random
+        result = self.calculate_mi(s1_dict, s2_dict)
+        print(result)
+
+        # same sequence
+        result = self.calculate_mi(s1_dict, s1_dict)
+        print(result)
+
+
 
 def str2bool(v):
     """
@@ -349,4 +399,6 @@ def main(arguments):
     print('Created TFRecords')
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    misc = Misc(35, True, 0, False)
+    misc.test_mmi()
+    # sys.exit(main(sys.argv[1:]))
