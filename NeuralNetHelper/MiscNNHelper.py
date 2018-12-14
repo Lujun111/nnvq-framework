@@ -76,6 +76,8 @@ class MiscNN(object):
         :return pwtmp, pytmp, pw_y_tmp: return P(w), P(y) and P(w|y)
         """
         with tf.variable_scope('MiscNNHelper/helper_mi_tf'):
+            floor_val = 1e-8
+
             # define tf variables to use scatter_nd and scatter_nd_add
             # pwtmp = tf.Variable(tf.zeros(self.num_labels), trainable=False, dtype=tf.float32)
             # pytmp = tf.Variable(tf.zeros(self.cb_size), trainable=False, dtype=tf.float32)
@@ -91,16 +93,19 @@ class MiscNN(object):
             pwtmp = tf.assign(pwtmp, tf.zeros([self.num_labels]))  # reset Variable/floor
             # pwtmp = self.reset_variable(pwtmp)
             pwtmp = tf.scatter_add(pwtmp, labels, tf.ones(tf.shape(labels)))
+            pwtmp += floor_val
 
             # create P(y)
             pytmp = tf.assign(pytmp, tf.zeros([self.cb_size]))  # reset Variable/floor
             pytmp = tf.scatter_add(pytmp, y_labels, tf.ones(tf.shape(y_labels)))
+            pytmp += floor_val
 
             # create P(w|y)
             pw_y_tmp = tf.assign(pw_y_tmp, tf.zeros([self.num_labels, self.cb_size]))  # reset Variable/floor
             pw_y_tmp = tf.scatter_nd_add(pw_y_tmp,
                                          tf.concat([tf.cast(labels, dtype=tf.int64), tf.expand_dims(y_labels, 1)],
                                                    axis=1), tf.ones(tf.shape(y_labels)))
+            pw_y_tmp += floor_val
 
             # adding to graph for visualisation in tensorboard
             # tf.identity(pwtmp, 'P_w')
@@ -108,9 +113,9 @@ class MiscNN(object):
             # tf.identity(pw_y_tmp, 'P_w_y')
 
             # normalize
-            pwtmp = tf.divide(pwtmp, tf.reduce_sum(pwtmp))
-            pytmp = tf.divide(pytmp, tf.reduce_sum(pytmp))
-            pw_y_tmp = tf.divide(pw_y_tmp, tf.expand_dims(tf.clip_by_value(tf.reduce_sum(pw_y_tmp, axis=1), 1e-8, 1e6), 1))
+            pwtmp /= tf.reduce_sum(pwtmp)
+            pytmp /= tf.reduce_sum(pytmp)
+            pw_y_tmp /= tf.reduce_sum(pw_y_tmp, axis=1, keepdims=True)
 
             return pwtmp, pytmp, pw_y_tmp
 
