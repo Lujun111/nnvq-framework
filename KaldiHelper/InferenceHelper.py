@@ -71,7 +71,7 @@ class InferenceModel(object):
         """
 
         # create DataIterator for iterate through the split folder created by kaldi
-        dataset = DataIterator(nj, self._splice, self._cmvn, input_folder)
+        dataset = DataIterator(nj, input_folder, splice=self._splice, cmvn=self._cmvn)
 
         dim = self._dim * (2 * self._splice + 1)
 

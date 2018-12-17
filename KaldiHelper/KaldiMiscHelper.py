@@ -46,7 +46,7 @@ class KaldiMiscHelper(object):
         assert type(path_data) == str and type(path_phonemes) == str
 
         # create Iterators
-        dataset = DataIterator(self._nj, self._splice, self._cmvn, path_data)
+        dataset = DataIterator(self._nj, path_data, splice=self._splice, cmvn=self._cmvn)
         phonemes = AlignmentIterator(nj, path_phonemes)
 
         # iterate through data
@@ -74,7 +74,7 @@ class KaldiMiscHelper(object):
                 break
 
     def concat_data(self, path_data, path_phonemes, output_folder):
-        dataset = DataIterator(self._nj, self._splice, self._cmvn, path_data)
+        dataset = DataIterator(self._nj, path_data, splice=self._splice, cmvn=self._cmvn)
 
         create_stats = True
         if path_data in ['test', 'dev']:

@@ -1,5 +1,6 @@
 #!/home/ga96yar/tensorflow_py3/bin/python
 import tensorflow as tf
+import re
 import sys
 import random
 import argparse
@@ -40,7 +41,7 @@ class Misc(object):
         # - we create an transformation vector which maps the 166 phonemes to 40
         self._get_transformation_vec()
 
-    def calculate_mi(self, y_nn, labels, nn_output=False):
+    def calculate_mi(self, stats, floor_val=1e-15):
         # TODO use dict for y_nn and labels is the best way?
         """
         Calculate the mutual information between two sets (here labels and phonemes)
@@ -55,44 +56,33 @@ class Misc(object):
 
         # check type of labels
 
-        assert(isinstance(y_nn, dict) and isinstance(labels, dict))
+        assert(isinstance(stats, dict))
 
-        # if nn output, do argmax
-        if nn_output:
-            try:
-                y_nn['seq'] = np.argmax(y_nn['seq'], axis=1)
-            except KeyError:
-                print('Key not found!')
-
-        # convert shared phonems to single
-        if not self._state_based:
-            try:
-                labels['seq'] = self.trans_vec_to_phones(labels['seq'])
-            except KeyError:
-                print('Key not found!')
-
-        p_w, p_y, p_w_y = self._helper_mi(y_nn, labels)
+        # floor
+        stats['p_w'] += floor_val
+        stats['p_y'] += floor_val
+        stats['p_w_y'] += floor_val
 
         # normalize
-        p_w /= np.sum(p_w)
-        p_y /= np.sum(p_y)
-        p_w_y /= np.sum(p_w_y, axis=0, keepdims=True)
+        stats['p_y'] /= np.sum(stats['p_y'])
+        stats['p_w'] /= np.sum(stats['p_w'])
+        stats['p_w_y'] /= np.sum(stats['p_w_y'], axis=0, keepdims=True)
 
         # H(Y) on log2 base
-        h_y = np.dot(p_y, np.log2(p_y))
-        h_w = np.dot(p_w, np.log2(p_w))
+        stats['h_y'] = -np.dot(stats['p_y'], np.log2(stats['p_y']))
+        stats['h_w'] = -np.dot(stats['p_w'], np.log2(stats['p_w']))
 
         # H(Y|W) on log2 base
-        h_w_y = p_w_y * np.log2(p_w_y)  # log2 base
-        h_w_y = np.sum(h_w_y, axis=0)  # reduce sum
-        h_w_y = np.dot(p_y, h_w_y)
+        stats['h_w_y'] = stats['p_w_y'] * np.log2(stats['p_w_y'])  # log2 base
+        stats['h_w_y'] = np.sum(stats['h_w_y'], axis=0)  # reduce sum
+        stats['h_w_y'] = -np.dot(stats['p_y'], stats['h_w_y'])
 
         # create a dict for returning values
         result = {
-            'MI': -alpha * h_w - beta * h_w_y,
-            'H(seq1)': -h_w,
-            'H(seq2)': -h_y,
-            'H(seq1|seq2)': -h_w_y
+            'MI': alpha * stats['h_w'] + beta * stats['h_w_y'],
+            'H(W)': stats['h_w'],
+            'H(Y)': stats['h_y'],
+            'H(W|Y)': stats['h_w_y']
         }
 
         return result
@@ -135,7 +125,7 @@ class Misc(object):
 
         return -alpha * h_w - beta * h_w_y, -h_w, -h_y, -h_w_y
 
-    def _helper_mi(self, y_nn, labels, floor_val=1e-15):
+    def helper_mi(self, y_nn, labels, stats, nn_output=False):
         """
         Helper functions to get P(w), P(y) and P(w|y)
 
@@ -143,25 +133,33 @@ class Misc(object):
         :param labels:      labels (dict)
         :return:            P(w), P(y) and P(w|y)
         """
-        pw_tmp = np.zeros(y_nn['dim'])
-        py_tmp = np.zeros(labels['dim'])
-        pw_y_tmp = np.zeros([y_nn['dim'], labels['dim']])
 
-        # set small epsilon
-        pw_tmp.fill(floor_val)
-        py_tmp.fill(floor_val)
-        pw_y_tmp.fill(floor_val)
+        assert (isinstance(stats, dict))
+
+        # if nn output, do argmax
+        if nn_output:
+            try:
+                y_nn = np.argmax(y_nn, axis=1)
+            except KeyError:
+                print('Key not found!')
+
+        # convert shared phonems to single
+        if not self._state_based:
+            try:
+                labels = self.trans_vec_to_phones(labels)
+            except KeyError:
+                print('Key not found!')
 
         # use input array as indexing array
-        pw_tmp[y_nn['seq']] += 1.0
-        py_tmp[labels['seq']] += 1.0
-        pw_y_tmp[y_nn['seq'], labels['seq']] += 1.0
+        stats['p_w'][y_nn] += 1.0
+        stats['p_y'][labels] += 1.0
+        stats['p_w_y'][y_nn, labels] += 1.0
 
-        test = pd.DataFrame(py_tmp)
-        test.to_csv('test_inference.txt', header=False, index=False)
+        # test = pd.DataFrame(py_tmp)
+        # test.to_csv('test_inference.txt', header=False, index=False)
         # print(np.sum(test.values))
 
-        return pw_tmp, py_tmp, pw_y_tmp
+        return stats
 
     def _helper_mi_tf(self, labels, alignments, cb_len):
         """
@@ -202,7 +200,7 @@ class Misc(object):
         spoken noise) which is not used. But is easier to extract without changing a lot
         """
         # define convert vector to get the phones
-        trans_vec = np.zeros(166)
+        trans_vec = np.zeros(166, dtype=int)
         for i in range(10):
             if i < 5:
                 trans_vec[i] = 0
@@ -227,12 +225,7 @@ class Misc(object):
         :param label_vec:   vector with labels for transformation
         :return:            return the transformed vector
         """
-        label_vec = label_vec.astype(int)
-        phone_vec = np.zeros(label_vec.shape)
-        for i in range(label_vec.shape[0]):
-            phone_vec[i] = self._trans_vec[label_vec[i]]
-
-        return phone_vec
+        return self._trans_vec[label_vec.astype(int)]
 
     def _normalize_data(self, data_array):
         """
@@ -304,7 +297,7 @@ class Misc(object):
             else:
                 print('No mean or var set!!!')
 
-        dataset = DataIterator(self._nj, self._splice, self._cmvn, path_input)
+        dataset = DataIterator(self._nj, path_input, splice=self._splice, cmvn=self._cmvn)
 
         tmp_df = pd.DataFrame()
         count = 1
@@ -323,28 +316,49 @@ class Misc(object):
             except StopIteration:
                 break
 
-    def test_mmi(self):
+    def test_mmi(self, folder_gmm, folder_nn):
 
-        s1 = np.array([random.randrange(1, self._dim_seq1, 1) for _ in range(1000)])
-        s2 = np.array([random.randrange(1, self._dim_seq2, 1) for _ in range(1000)])
+        # create iterator
+        ali_gmm = AlignmentIterator(self._nj, folder_gmm, state_based=self._state_based)
+        ali_nn = AlignmentIterator(self._nj, folder_nn, convert=True, state_based=self._state_based)
 
-        s1_dict = {
-            'seq': s1,
-            'dim': self._dim_seq1
+        # print dim
+        print('dim seq1: ' + str(ali_gmm.dim))
+        print('dim seq2: ' + str(ali_nn.dim))
+
+        # create base arrays for collecting data
+        stats = {
+            'p_w': np.zeros(ali_gmm.dim),
+            'p_y': np.zeros(ali_nn.dim),
+            'p_w_y': np.zeros([ali_gmm.dim, ali_nn.dim])
         }
-        s2_dict = {
-            'seq': s2,
-            'dim': self._dim_seq2
-        }
 
-        # random
-        result = self.calculate_mi(s1_dict, s2_dict)
-        print(result)
+        while True:
+            try:
+                # get dicts
+                dict_w = dict(kaldi_io.read_ali_ark(ali_gmm.next_file()))
+                dict_y = dict(kaldi_io.read_ali_ark(ali_nn.next_file()))
 
-        # same sequence
-        result = self.calculate_mi(s1_dict, s1_dict)
-        print(result)
+                # find mutual keys in both dicts
+                keys = [key for key in dict_w if key in dict_y]
 
+                # gather counts for all alignments
+                for key in keys:
+                    if self._state_based:
+                        stats['p_w'][dict_w[key]] += 1.0
+                        stats['p_y'][dict_y[key]] += 1.0
+                        stats['p_w_y'][dict_w[key], dict_y[key]] += 1.0
+                    else:
+                        stats['p_w'][self._trans_vec[dict_w[key]]] += 1.0
+                        stats['p_y'][self._trans_vec[dict_y[key]]] += 1.0
+                        stats['p_w_y'][self._trans_vec[dict_y[key]],
+                                       self._trans_vec[dict_w[key]]] += 1.0
+
+            except StopIteration:
+                # calculate MI
+                print(self.calculate_mi(stats))
+
+                break
 
 
 def str2bool(v):
@@ -399,6 +413,6 @@ def main(arguments):
     print('Created TFRecords')
 
 if __name__ == "__main__":
-    # misc = Misc(35, True, 0, False)
-    # misc.test_mmi()
-    sys.exit(main(sys.argv[1:]))
+    misc = Misc(35, False, 0, False)
+    misc.test_mmi('mono_ali', 'tri1')
+    # sys.exit(main(sys.argv[1:]))

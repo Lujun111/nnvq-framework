@@ -1,6 +1,8 @@
 #!/home/ga96yar/tensorflow_py3/bin/python
 import os
 import re
+import glob
+import numpy as np
 
 
 class DataIterator(object):
@@ -11,7 +13,7 @@ class DataIterator(object):
     ATTENTION: The DataIterator only handles the path (string) to the split folders
     and does not actually load any data!!!
     """
-    def __init__(self, nj, splice, cmvn, folder):
+    def __init__(self, nj, folder, splice=0, cmvn=True):
         """
         Init DataIterator
 
@@ -116,10 +118,17 @@ class AlignmentIterator(DataIterator):
     AlignmentIterator object for iterating though number of alignments. Usually has the
     same number of folders as DataIterator
     """
-    def __init__(self, nj, folder):
+    def __init__(self, nj, folder, state_based=True, convert=False):
         """
         Init AlignmentIterator using the base class DataIterator
+
+        :param state_based:     take state based or phone labels
+        :param convert:         convert model states to monophone states
+        :param dim:             dim of the stream
         """
+        self._state_based = state_based
+        self._convert = convert
+        self.dim = 0
         super().__init__(nj, folder)
 
     def _create_iterator(self):
@@ -129,8 +138,46 @@ class AlignmentIterator(DataIterator):
         """
         assert type(self._nj) == int and type(self._folder) == str
 
-        path_generator = [self._folder + '/' + s for s in os.listdir(self._folder)]
-        # sort list for later processing
-        convert = lambda text: int(text) if text.isdigit() else text
-        path_generator.sort(key=lambda key: [convert(c) for c in re.split('([0-9]+)', key)])
-        self._generator = iter(path_generator)
+        # path to mono model for converting to monophone states
+        path_mono = self.path + '/exp/mono'
+        convert_str = '{state_str} {path}/final.mdl "ark,t:gunzip -c {path}/ali.{i}.gz|" ark:-|'
+
+        # state based or phone based labels
+        if self._state_based:
+            state_based_str = 'ali-to-pdf'
+        else:
+            state_based_str = 'ali-to-phones --per-frame'
+            self.dim = 41
+
+        # convert triphone states to monophone states
+        if self._convert:
+            tmp_str = 'convert-ali {path}/final.mdl {path_mono}/final.mdl {path_mono}/tree ' \
+                          '"ark,t:gunzip -c {path}/ali.{i}.gz|" ark:-|'
+            convert_str = tmp_str + ' {state_str} {path_mono}/final.mdl ark:- ark:-|'
+            self.dim = 127
+        else:
+            with open(self.path + '/exp/' + self._folder + '/final.occs', 'r') as f:
+                self.dim = np.array(f.readline().replace('[', '').replace(']', '').strip().split(' ')).shape[0]
+
+        if ('/' or '..') not in self._folder:
+            assert (os.path.isdir(self.path + '/exp/' + self._folder))
+
+            path_tmp = self.path + '/exp/' + self._folder
+            # base_str.format(path=self.path + '/exp/' + self._folder)
+            # convert.format(path=self.path + '/exp/' + self._folder)
+            self._generator = (convert_str.format(state_str=state_based_str, path=path_tmp, path_mono=path_mono, i=i)
+                               for i in range(1, self._nj + 1))
+
+        else:
+            raise NotImplementedError
+            # base_str.format(path=self._folder)
+            # convert.format(path=self._folder)
+            # self._generator = ((base_str + ' ' + convert).format(i=i) for i in range(1, self._nj + 1))
+            # # filter ali out of the folder
+            # path_generator = [f for f in os.listdir(self._folder) if re.match(r'ali\.[0-9]+.*\.gz', f)]
+            #
+            # assert(len(path_generator) == self._nj)
+            # # sort list for later processing
+            # convert = lambda text: int(text) if text.isdigit() else text
+            # path_generator.sort(key=lambda key: [convert(c) for c in re.split('([0-9]+)', key)])
+            # self._generator = iter(path_generator)
