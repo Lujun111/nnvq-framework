@@ -29,12 +29,15 @@ dim_labels = 1
 # Network parameter
 scale_soft = 15.0
 learning_rate = current_lr = 1e-2
-lr_epoch_decrease = 100
+lr_epoch_decrease = 101
 lr_decay = 0.5
 learning_rate_post = 1e-3
+do_rate = 0.1
 exponential_decay = False
 
 # train Network
+l2_loss_reg = True
+scale_l2 = 1e-7
 restore = False
 train_prob = False
 vqing = False

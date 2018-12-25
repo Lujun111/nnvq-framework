@@ -75,12 +75,14 @@ if __name__ == "__main__":
 
                 # train_model.create_p_s_m()
 
+
+
                 print('Training base network')
                 train_model.train_single_epoch()
 
-                if i % 10 == 0:
-                    print('Creating P(s_k|m_j)...')
-                    train_model.create_p_s_m()
+                # if i % 10 == 0:
+                #     print('Creating P(s_k|m_j)...')
+                #     train_model.create_p_s_m()
 
                 print('Doing Validation...')
                 train_model.do_validation()

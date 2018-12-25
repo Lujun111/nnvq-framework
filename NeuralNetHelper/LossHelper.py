@@ -47,6 +47,8 @@ class Loss(object):
                 used_loss = tf.reduce_mean(-tf.reduce_sum(smoothed_labels *
                                                           tf.log(tf.tensordot(self._model.inference, tf.transpose(cond_prob),
                                                                               axes=1)), reduction_indices=[1]))
+                if self._settings.l2_loss_reg:
+                    used_loss += tf.losses.get_regularization_loss()
 
 
                 # cond_prob = self._misc.conditioned_probability(self._model.inference, self._labels,

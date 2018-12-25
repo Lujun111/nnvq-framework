@@ -312,6 +312,7 @@ class Train(object):
                 # output_all = np.concatenate(output_all)
                 # labels_all = np.concatenate(labels_all)
 
+                # TODO refactor!
                 p_w /= np.sum(p_w)
                 p_y /= np.sum(p_y)
                 p_w_y /= np.expand_dims(np.sum(p_w_y, axis=1), 1)
@@ -334,7 +335,7 @@ class Train(object):
                 # print(h_w_y)
 
                 val_dict = {
-                    'count': self._train_dict['count']
+                    'count': self._variables['epoch']
                 }
                 return_dict = self._session.run(val_dict)
                 return_dict['mi'] = [-h_w + h_w_y, -h_w, -h_y, -h_w_y]

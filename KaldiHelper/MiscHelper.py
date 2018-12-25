@@ -413,6 +413,6 @@ def main(arguments):
     print('Created TFRecords')
 
 if __name__ == "__main__":
-    misc = Misc(35, False, 0, False)
-    misc.test_mmi('mono_ali', 'tri1')
-    # sys.exit(main(sys.argv[1:]))
+    # misc = Misc(35, True, 0, False)
+    # misc.test_mmi('mono_ali', 'tri1')
+    sys.exit(main(sys.argv[1:]))

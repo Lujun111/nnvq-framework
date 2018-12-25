@@ -54,41 +54,45 @@ class Model(object):
         # ------------------------------------------------------------------
         num_neurons = 512
         activation = tf.nn.relu
-        do_rate = 0.1
+
+        regulizer = None
+        if self._settings.l2_loss_reg:
+            regulizer = tf.contrib.layers.l2_regularizer(scale=self._settings.scale_l2)
 
         with tf.variable_scope('base_network'):
-            fc = tf.layers.dense(self.features, num_neurons, activation=activation)
+            fc = tf.layers.dense(self.features, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc1_bn = tf.layers.batch_normalization(fc1, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=do_rate, training=self.train)
+            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
 
-            fc = tf.layers.dense(fc, num_neurons, activation=activation)
+            fc = tf.layers.dense(fc, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc2_bn = tf.layers.batch_normalization(fc2, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=do_rate, training=self.train)
+            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
 
-            fc = tf.layers.dense(fc, num_neurons, activation=activation)
+            fc = tf.layers.dense(fc, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=do_rate, training=self.train)
+            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
             #
-            fc = tf.layers.dense(fc, num_neurons, activation=activation)
+            fc = tf.layers.dense(fc, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=do_rate, training=self.train)
+            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
             #
             # fc = tf.layers.dense(fc, num_neurons, activation=activation)
             # # # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train, center=False, scale=False)
             # fc = tf.layers.batch_normalization(fc, training=self.train)
-            # fc = tf.layers.dropout(fc, rate=do_rate, training=self.train)
+            # fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
             # # #
             # fc = tf.layers.dense(fc, num_neurons, activation=activation)
             # # # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)
             # fc = tf.layers.batch_normalization(fc, training=self.train)
-            # fc = tf.layers.dropout(fc, rate=do_rate, training=self.train)
+            # fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
 
             # # WTA-layer starts here
-            out = tf.layers.dense(fc, self._settings.codebook_size, activation=tf.nn.sigmoid)
+            out = tf.layers.dense(fc, self._settings.codebook_size, activation=tf.nn.sigmoid,
+                                  kernel_regularizer=regulizer)
             out_scaled = tf.scalar_mul(self._settings.scale_soft, out)
             # output without softmax
             self.logits = out_scaled
