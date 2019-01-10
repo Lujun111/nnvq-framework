@@ -16,15 +16,20 @@ class Saver(object):
                     print('Saving better model...')
                     self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
                     self._current_value = save_dict['accuracy'][0]
+                    return 1.0
             elif self._settings.identifier == 'combination':
                 if save_dict['accuracy_combination'][0] > self._current_value:
                     print('Saving better model...')
                     self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
                     self._current_value = save_dict['accuracy_combination'][0]
+                    return 1.0
             elif self._settings.identifier in ['nnvq', 'nnvq_tri']:
                 if save_dict['mi'][0] > self._current_value:
                     print('Saving better model...')
                     self._saver.save(self._session, self._settings.path_checkpoint + '/saved_model')
                     self._current_value = save_dict['mi'][0]
+                    self.current_count = 0
+                    return 1.0
                 else:
                     self.current_count += 1
+                    return 0.0

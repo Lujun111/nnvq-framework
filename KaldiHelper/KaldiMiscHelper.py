@@ -2,6 +2,7 @@
 import pandas as pd
 import collections
 import sys
+from pathlib import Path
 import argparse
 import numpy as np
 from kaldi_io import kaldi_io
@@ -17,7 +18,7 @@ class KaldiMiscHelper(object):
         self._dim = dim
         self._cmvn = cmvn
 
-    def _create_and_save_stats(self, mat):
+    def _create_and_save_stats(self, mat, output):
         # tmp_mean = np.mean(mat, axis=0)
         # tmp_std = np.std(mat, axis=0)
 
@@ -38,7 +39,12 @@ class KaldiMiscHelper(object):
             'mean': np.expand_dims(tmp_mean, 1),
             'std': np.expand_dims(tmp_std, 1)
         }
-        with open('stats.mat', 'wb') as f:
+
+        # change path
+        p = Path(output)
+        print(p.parent)
+
+        with open(str(p.parent) + '/stats.mat', 'wb') as f:
             for key, mat in list(stats_dict.items()):
                 kaldi_io.write_mat(f, mat.astype(np.float32, copy=False), key=key)
 
@@ -130,8 +136,9 @@ class KaldiMiscHelper(object):
             except StopIteration:
                 if create_stats:
                     print('Saving std and mean of data to stats.mat')
-                    self._create_and_save_stats(gather_stats)
+                    self._create_and_save_stats(gather_stats, output_folder)
                 break
+
 
 def str2bool(v):
     """

@@ -64,7 +64,7 @@ else
 fi
 
 # create log folder in working dir
-mkdir -p $working_dir/log $working_dir/alignments $working_dir/tf_data/train_$string \
+mkdir -p "$working_dir"/log $working_dir/alignments $working_dir/tf_data/train_$string \
     $working_dir/tf_data/dev_$string $working_dir/tf_data/test_$string $working_dir/features
 
 
@@ -165,10 +165,10 @@ if [ $stage -le 0 ]; then
     for dataset in train test dev; do
         if [[ "$dataset" == "train" ]]; then
             python $framework_path/KaldiHelper/MiscHelper.py --nj $nj --splice $splice_feats --state-based $state_based --cmvn $cmvn \
-                $(pwd)/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
+                $working_dir/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
         else
             python $framework_path/KaldiHelper/MiscHelper.py --nj $njd --splice $splice_feats --state-based $state_based --cmvn $cmvn \
-                $(pwd)/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
+                $working_dir/stats.mat $working_dir/tmp_${dataset} $working_dir/tf_data/${dataset}_$string
         fi
     done
 fi

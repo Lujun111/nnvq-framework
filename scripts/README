@@ -1,2 +1,2 @@
-./generate_tf_data.sh --nj 35 --splice-feats true --mono true train_20kshort_nodup exp/tri3 exp/mono output
+./generate_tf_data.sh --nj 35 --splice-feats 0 --mono true train_20kshort_nodup exp/tri3 exp/mono output
 

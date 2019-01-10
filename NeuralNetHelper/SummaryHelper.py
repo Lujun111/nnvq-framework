@@ -42,7 +42,7 @@ class Summary(object):
                 summary_tmp.value.add(tag='train/H(w|y)', simple_value=add_dict['mi'][3])
                 # summary_tmp.value.add(tag='misc/learning_rate', simple_value=self._settings.learning_rate_pre)
                 summary_tmp.value.add(tag='train/acc_vanilla', simple_value=add_dict['accuracy_vanilla'][0])
-            summary_tmp.value.add(tag='misc/learning_rate', simple_value=self._settings.current_lr)
+            # summary_tmp.value.add(tag='misc/learning_rate', simple_value=self._settings.current_lr)
             summary_tmp.value.add(tag='train/loss', simple_value=add_dict['loss'])
 
             return summary_tmp
@@ -59,6 +59,7 @@ class Summary(object):
                 summary_tmp.value.add(tag='validation/mutual_information', simple_value=add_dict['mi'][0])
                 summary_tmp.value.add(tag='validation/normalized_mutual_information',
                                       simple_value=(2 * add_dict['mi'][0]/(add_dict['mi'][1] + add_dict['mi'][2])))
+                summary_tmp.value.add(tag='misc/learning_rate', simple_value=add_dict['lr'])
             elif self._settings.identifier == 'nnvq_tri':
                 summary_tmp.value.add(tag='validation/mutual_information', simple_value=add_dict['mi'][0])
             elif self._settings.identifier == 'restore':

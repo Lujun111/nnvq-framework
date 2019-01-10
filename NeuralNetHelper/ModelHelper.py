@@ -63,17 +63,17 @@ class Model(object):
             fc = tf.layers.dense(self.features, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc1_bn = tf.layers.batch_normalization(fc1, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
+            # fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
 
             fc = tf.layers.dense(fc, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc2_bn = tf.layers.batch_normalization(fc2, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
+            # fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
 
             fc = tf.layers.dense(fc, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc3_bn = tf.layers.batch_normalization(fc3, training=self.train, center=False, scale=False)
             fc = tf.layers.batch_normalization(fc, training=self.train)
-            fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
+            # fc = tf.layers.dropout(fc, rate=self._settings.do_rate, training=self.train)
             #
             fc = tf.layers.dense(fc, num_neurons, activation=activation, kernel_regularizer=regulizer)
             # fc4_bn = tf.layers.batch_normalization(fc4, training=self.train, center=False, scale=False)

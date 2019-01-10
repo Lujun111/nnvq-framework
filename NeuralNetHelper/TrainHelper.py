@@ -6,7 +6,7 @@ import os
 import time
 import numpy as np
 from kaldi_io import kaldi_io
-from NeuralNetHelper import Settings
+from NeuralNetHelper.Settings import Settings
 from NeuralNetHelper.DataFeedingHelper import DataFeeder
 from NeuralNetHelper.SummaryHelper import Summary
 from KaldiHelper.InferenceHelper import InferenceModel
@@ -38,7 +38,8 @@ class Train(object):
         self._count_reduce_lr = 0
 
         self._increment_epoch_op = tf.assign_add(self._variables['epoch'], 1)
-        self._mult_lr_op = tf.multiply(self._variables['learning_rate'], Settings.lr_decay)
+        self._mult_lr_op = tf.assign(self._variables['learning_rate'],
+                                     tf.multiply(self._variables['learning_rate'], Settings.lr_decay))
 
         self._create_train_dict()
 
@@ -209,7 +210,14 @@ class Train(object):
         self._session.run(tf.global_variables_initializer())
 
         time_string = time.strftime('%d.%m.%Y - %H:%M:%S')
-        self._train_writer = tf.summary.FileWriter(Settings.path_tensorboard + '/training_' + time_string, tf.get_default_graph())
+        self._train_writer = tf.summary.FileWriter(Settings.path_tensorboard + '/training_' + time_string + '_'
+                                                   + str(Settings.codebook_size), tf.get_default_graph())
+
+        # add learning rate of the first epoch
+        summary_tmp = tf.Summary()
+        summary_tmp.value.add(tag='misc/learning_rate', simple_value=self._settings.current_lr)
+        self._train_writer.add_summary(summary_tmp)
+        self._train_writer.flush()
 
     @show_timing(text='train', verbosity=2)
     def train_single_epoch(self, cond_prob=None):
@@ -294,24 +302,15 @@ class Train(object):
                                           self._placeholders['ph_labels']: labs,
                                           self._placeholders['ph_last_layer']: False})
 
-                # y_tmp = np.argmax(output_nn, axis=1).astype(np.int32)
-                # p_w[labs.astype(np.int32)] += 1.0
-                # p_y[y_tmp] += 1.0
-                # p_w_y[labs.astype(np.int32), y_tmp] += 1.0
-
                 p_w += stats[0]
                 p_y += stats[1]
                 p_w_y += stats[2]
 
-                # output_all.append(np.argmax(output_nn, axis=1))
-                # output_all.append(feat)
-                # labels_all.append(labs)
-
             except tf.errors.OutOfRangeError:
-                # reshape data
-                # output_all = np.concatenate(output_all)
-                # labels_all = np.concatenate(labels_all)
+                # increase epoch counter
+                self._session.run(self._increment_epoch_op)
 
+                # calc mi
                 # TODO refactor!
                 p_w /= np.sum(p_w)
                 p_y /= np.sum(p_y)
@@ -339,46 +338,22 @@ class Train(object):
                 }
                 return_dict = self._session.run(val_dict)
                 return_dict['mi'] = [-h_w + h_w_y, -h_w, -h_y, -h_w_y]
-                #
-                # data_all = list(zip(output_all, labels_all))
-                #
-                # # pick subset to fit onto the gpu
-                # sub_percentage = 1.0
-                # sub_indices = np.random.choice(len(data_all), int(sub_percentage * len(data_all)), replace=False)
-                # sub_data = [data_all[i] for i in sub_indices]
-                #
-                # features_all, labels_all = zip(*sub_data)
-                #
-                # # mi_test = sum_mi / self._count_mi
-                # # mi_vald = self._session.run(self._mutual_information, feed_dict={self._ph_train: False, self._ph_features:
-                # #     features_all, self._ph_labels: labels_all})
-                # sub_dict = dict((k, self._train_dict[k])
-                #                 for k in ('count', 'accuracy_combination', 'mi', 'accuracy')
-                #                 if k in self._train_dict)
-                # return_dict = self._session.run(sub_dict,
-                #                                 feed_dict={self._placeholders['ph_train']: False,
-                #                                            self._placeholders['ph_features']: features_all,
-                #                                            self._placeholders['ph_labels']: labels_all,
-                #                                            self._placeholders['ph_last_layer']: False})
-
-                self._train_writer.add_summary(self._summary.validation_logs(return_dict), return_dict['count'])
-                self._train_writer.flush()
 
                 # save depending on model
                 self._saver.save(return_dict)
 
-                # # check for reducing learning rate
-                # if self._saver.current_count > Settings.lr_epoch_decrease:
-                #     print('Validation not getting better for ' + str(Settings.lr_epoch_decrease) +
-                #           ' Epochs')
-                #     print('Reducing learning rate by ' + str(Settings.lr_decay))
-                #     self._session.run(self._mult_lr_op)
-                #     self._saver.current_count = 0
+                # check for reducing learning rate
+                if self._saver.current_count > Settings.lr_epoch_decrease:
+                    print('Validation not getting better for ' + str(Settings.lr_epoch_decrease) +
+                          ' Epochs')
+                    print('Reducing learning rate by ' + str(Settings.lr_decay))
+                    self._session.run(self._mult_lr_op)
+                    self._saver.current_count = 0
 
-                # increase epoch counter
-                _, self._settings.current_lr = self._session.run([self._increment_epoch_op,
-                                                                  self._variables['learning_rate']])
-
+                # update current lr add summary
+                return_dict['lr'] = self._settings.current_lr = self._session.run(self._variables['learning_rate'])
+                self._train_writer.add_summary(self._summary.validation_logs(return_dict), return_dict['count'])
+                self._train_writer.flush()
 
                 break
 
