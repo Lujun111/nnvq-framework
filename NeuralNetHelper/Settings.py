@@ -19,14 +19,14 @@ class Settings(object):
     delta = 0.001   # delta for P(s_k|m_j) 0.001
     codebook_size = 1000  # 13000
     batch_size = 15000
-    epoch_size = 101
+    epoch_size = 51
     dim_features = 39  # 39 (1f)   # 117 (3f)  # 195 (5f)
     dim_labels = 1
 
     # Network parameter
     scale_soft = 15.0
     learning_rate = current_lr = 1e-2
-    lr_epoch_decrease = 6
+    lr_epoch_decrease = 10
     lr_decay = 0.5
     learning_rate_post = 1e-3
     do_rate = 0.2

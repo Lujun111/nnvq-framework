@@ -145,19 +145,19 @@ class AlignmentIterator(DataIterator):
         # state based or phone based labels
         if self._state_based:
             state_based_str = 'ali-to-pdf'
+
+            # convert triphone states to monophone states
+            if self._convert:
+                tmp_str = 'convert-ali {path}/final.mdl {path_mono}/final.mdl {path_mono}/tree ' \
+                          '"ark,t:gunzip -c {path}/ali.{i}.gz|" ark:-|'
+                convert_str = tmp_str + ' {state_str} {path_mono}/final.mdl ark:- ark:-|'
+                self.dim = 127
+            else:
+                with open(self.path + '/exp/' + self._folder + '/final.occs', 'r') as f:
+                    self.dim = np.array(f.readline().replace('[', '').replace(']', '').strip().split(' ')).shape[0]
         else:
             state_based_str = 'ali-to-phones --per-frame'
             self.dim = 41
-
-        # convert triphone states to monophone states
-        if self._convert:
-            tmp_str = 'convert-ali {path}/final.mdl {path_mono}/final.mdl {path_mono}/tree ' \
-                          '"ark,t:gunzip -c {path}/ali.{i}.gz|" ark:-|'
-            convert_str = tmp_str + ' {state_str} {path_mono}/final.mdl ark:- ark:-|'
-            self.dim = 127
-        else:
-            with open(self.path + '/exp/' + self._folder + '/final.occs', 'r') as f:
-                self.dim = np.array(f.readline().replace('[', '').replace(']', '').strip().split(' ')).shape[0]
 
         if ('/' or '..') not in self._folder:
             assert (os.path.isdir(self.path + '/exp/' + self._folder))

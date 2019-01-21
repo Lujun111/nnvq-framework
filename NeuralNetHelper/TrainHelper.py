@@ -38,8 +38,8 @@ class Train(object):
         self._count_reduce_lr = 0
 
         self._increment_epoch_op = tf.assign_add(self._variables['epoch'], 1)
-        self._mult_lr_op = tf.assign(self._variables['learning_rate'],
-                                     tf.multiply(self._variables['learning_rate'], Settings.lr_decay))
+        # self._mult_lr_op = tf.assign(self._variables['learning_rate'],
+        #                              tf.multiply(self._variables['learning_rate'], Settings.lr_decay))
 
         self._create_train_dict()
 
@@ -342,13 +342,13 @@ class Train(object):
                 # save depending on model
                 self._saver.save(return_dict)
 
-                # check for reducing learning rate
-                if self._saver.current_count > Settings.lr_epoch_decrease:
-                    print('Validation not getting better for ' + str(Settings.lr_epoch_decrease) +
-                          ' Epochs')
-                    print('Reducing learning rate by ' + str(Settings.lr_decay))
-                    self._session.run(self._mult_lr_op)
-                    self._saver.current_count = 0
+                # # check for reducing learning rate
+                # if self._saver.current_count > Settings.lr_epoch_decrease:
+                #     print('Validation not getting better for ' + str(Settings.lr_epoch_decrease) +
+                #           ' Epochs')
+                #     print('Reducing learning rate by ' + str(Settings.lr_decay))
+                #     self._session.run(self._mult_lr_op)
+                #     self._saver.current_count = 0
 
                 # update current lr add summary
                 return_dict['lr'] = self._settings.current_lr = self._session.run(self._variables['learning_rate'])

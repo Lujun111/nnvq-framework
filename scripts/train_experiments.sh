@@ -15,6 +15,8 @@ splice_feats=0
 cmvn=true   # cmvn, if false -> global norm
 dim=39
 dropout=0.1
+lr_epoch_decrease=3
+f=1
 
 . parse_options.sh || exit 1;
 
@@ -59,6 +61,7 @@ if [ $stage -le 0 ]; then
             --dropout $dropout
         cd -
     done
+    exit 0;
 fi
 
 if [ $stage -le 1 ]; then
@@ -78,9 +81,30 @@ if [ $stage -le 1 ]; then
         cd ..
         python main.py --cb_size $i --tensorboard scripts/$tensorboard --checkpoint scripts/$current_path \
             --path_train $path_train --path_test $path_test --path_dev $path_dev --dim_features $((${f}*$dim)) \
-            --dropout $dropout
+            --dropout $dropout --lr_epoch_decrease $lr_epoch_decrease
         cd -
     done
+    exit 0;
 fi
 
-exit 0
+if [ $stage -le 2 ]; then
+    # start train_experiments for 1 3 5 frames and all data
+    i=1000 # == splice
+    # create path and folder
+    current_path=$model_checkpoint/nnvq_all_${i}_${f}f
+    mkdir -p $current_path
+
+    # define data paths
+    path_train="tf_data/splice_${f}f/train_pdf_all_splice_${f}f_cmn"
+    path_test="tf_data/splice_${f}f/test_pdf_all_splice_${f}f_cmn"
+    path_dev="tf_data/splice_${f}f/dev_pdf_all_splice_${f}f_cmn"
+
+    # train nnvq
+    cd ..
+    python main.py --cb_size $i --tensorboard scripts/$tensorboard --checkpoint scripts/$current_path \
+        --path_train $path_train --path_test $path_test --path_dev $path_dev --dim_features $((${f}*$dim)) \
+        --dropout $dropout --lr_epoch_decrease $lr_epoch_decrease
+    cd -
+fi
+
+exit 0;

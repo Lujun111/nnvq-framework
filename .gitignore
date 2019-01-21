@@ -13,6 +13,7 @@ scripts/alignments
 scripts/log
 scripts/model_checkpoint*
 scripts/stats*
+scripts/all*
 
 # files
 .idea

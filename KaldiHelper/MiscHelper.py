@@ -316,43 +316,60 @@ class Misc(object):
             except StopIteration:
                 break
 
-    def test_mmi(self, folder_gmm, folder_nn):
+    def test_mmi(self, folder_gmm, folder_nn, state_base_1=True, state_base_2=True):
 
         # create iterator
-        ali_gmm = AlignmentIterator(self._nj, folder_gmm, state_based=self._state_based)
-        ali_nn = AlignmentIterator(self._nj, folder_nn, convert=True, state_based=self._state_based)
+        seq1 = AlignmentIterator(self._nj, folder_gmm, state_based=state_base_1)
+        seq2 = AlignmentIterator(self._nj, folder_nn, convert=False, state_based=state_base_2)
 
         # print dim
-        print('dim seq1: ' + str(ali_gmm.dim))
-        print('dim seq2: ' + str(ali_nn.dim))
+        print('dim seq1: ' + str(seq1.dim))
+        print('dim seq2: ' + str(seq2.dim))
+
 
         # create base arrays for collecting data
         stats = {
-            'p_w': np.zeros(ali_gmm.dim),
-            'p_y': np.zeros(ali_nn.dim),
-            'p_w_y': np.zeros([ali_gmm.dim, ali_nn.dim])
+            'p_w': np.zeros(seq1.dim),
+            'p_y': np.zeros(seq2.dim),
+            'p_w_y': np.zeros([seq1.dim, seq2.dim])
         }
 
         while True:
+            # gather statistics
             try:
                 # get dicts
-                dict_w = dict(kaldi_io.read_ali_ark(ali_gmm.next_file()))
-                dict_y = dict(kaldi_io.read_ali_ark(ali_nn.next_file()))
+                dict_w = dict(kaldi_io.read_ali_ark(seq1.next_file()))
+                dict_y = dict(kaldi_io.read_ali_ark(seq2.next_file()))
 
                 # find mutual keys in both dicts
                 keys = [key for key in dict_w if key in dict_y]
 
-                # gather counts for all alignments
+                # gather counts for w
                 for key in keys:
-                    if self._state_based:
-                        stats['p_w'][dict_w[key]] += 1.0
-                        stats['p_y'][dict_y[key]] += 1.0
-                        stats['p_w_y'][dict_w[key], dict_y[key]] += 1.0
-                    else:
+                    if seq1.dim == 41:
                         stats['p_w'][self._trans_vec[dict_w[key]]] += 1.0
+                    else:
+                        stats['p_w'][dict_w[key]] += 1.0
+
+                #  gather counts for y
+                for key in keys:
+                    if seq2.dim == 41:
                         stats['p_y'][self._trans_vec[dict_y[key]]] += 1.0
-                        stats['p_w_y'][self._trans_vec[dict_y[key]],
-                                       self._trans_vec[dict_w[key]]] += 1.0
+                    else:
+                        stats['p_y'][dict_y[key]] += 1.0
+
+                #  gather counts for y
+                for key in keys:
+                    if seq1.dim == 41 and seq2.dim == 41:
+                        stats['p_w_y'][self._trans_vec[dict_w[key]],
+                                       self._trans_vec[dict_y[key]]] += 1.0
+                    elif seq1.dim == 41 and seq2.dim != 41:
+                        # print(dict_w[key])
+                        stats['p_w_y'][self._trans_vec[dict_w[key]], dict_y[key]] += 1.0
+                    elif seq1.dim == 41 and seq2.dim != 41:
+                        stats['p_w_y'][dict_w[key], self._trans_vec[dict_y[key]]] += 1.0
+                    else:
+                        stats['p_w_y'][dict_w[key], dict_y[key]] += 1.0
 
             except StopIteration:
                 # calculate MI
@@ -413,6 +430,6 @@ def main(arguments):
     print('Created TFRecords')
 
 if __name__ == "__main__":
-    # misc = Misc(35, True, 0, False)
-    # misc.test_mmi('mono_ali', 'tri1')
-    sys.exit(main(sys.argv[1:]))
+    misc = Misc(35, True, 0, False)
+    misc.test_mmi('mono_ali', 'mono_ali', state_base_1=False, state_base_2=True)
+    # sys.exit(main(sys.argv[1:]))

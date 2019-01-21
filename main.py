@@ -62,8 +62,8 @@ def train():
 
     loss = Loss(model, placeholders['ph_labels'], Settings)
 
-    # variables['learning_rate'] = tf.train.exponential_decay(Settings.learning_rate, variables['epoch'],
-    #                                            Settings.lr_epoch_decrease, Settings.lr_decay, staircase=True)
+    variables['learning_rate'] = tf.train.exponential_decay(Settings.learning_rate, variables['epoch'],
+                                               Settings.lr_epoch_decrease, Settings.lr_decay, staircase=True)
 
     optimizer = Optimizer(variables['learning_rate'], loss.loss)
 
@@ -138,6 +138,7 @@ def main(arguments):
                         default='tf_data/splice_1f/dev_pdf_20k_splice_1f_cmn')
     parser.add_argument('--dim_features', type=int, help='dim input features', default=39)
     parser.add_argument('--dropout', type=float, help='dropout value', default=0.1)
+    parser.add_argument('--lr_epoch_decrease', type=int, help='dropout value', default=3)
     args = parser.parse_args(arguments)
 
     # set new field values TODO best solution?
@@ -149,6 +150,7 @@ def main(arguments):
     Settings.path_dev = args.path_dev
     Settings.dim_features = args.dim_features
     Settings.do_rate = args.dropout
+    Settings.lr_epoch_decrease = args.lr_epoch_decrease
 
     # print the arguments which we fed into
     for arg in vars(args):
